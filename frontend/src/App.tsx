@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
 import Login from './pages/Login';
+import Vehicles from './pages/Vehicles';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -19,7 +20,7 @@ export default function App() {
         path="/dashboard/vehicles"
         element={
           <ProtectedRoute>
-            <Placeholder title="Vehicles" />
+            <Vehicles />
           </ProtectedRoute>
         }
       />

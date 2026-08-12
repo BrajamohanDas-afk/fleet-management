@@ -1,0 +1,93 @@
+import { Search } from 'lucide-react';
+import type { VehicleStatus, VehicleType } from '../../types';
+
+const STATUS_OPTIONS: { value: VehicleStatus | ''; label: string }[] = [
+  { value: '', label: 'All' },
+  { value: 'moving', label: 'Running' },
+  { value: 'standing', label: 'Stationary' },
+  { value: 'stale', label: 'Stale' },
+  { value: 'offline', label: 'Offline' },
+];
+
+const TYPE_OPTIONS: { value: VehicleType | ''; label: string }[] = [
+  { value: '', label: 'All' },
+  { value: 'bike', label: 'Bike' },
+  { value: 'car', label: 'Car' },
+  { value: 'truck', label: 'Truck' },
+  { value: 'bus', label: 'Bus' },
+  { value: 'other', label: 'Other' },
+];
+
+interface VehicleFiltersProps {
+  search: string;
+  onSearchChange: (value: string) => void;
+  statusFilter: VehicleStatus | '';
+  onStatusChange: (value: VehicleStatus | '') => void;
+  typeFilter: VehicleType | '';
+  onTypeChange: (value: VehicleType | '') => void;
+}
+
+export default function VehicleFilters({
+  search,
+  onSearchChange,
+  statusFilter,
+  onStatusChange,
+  typeFilter,
+  onTypeChange,
+}: VehicleFiltersProps) {
+  return (
+    <div className="space-y-4 rounded-xl bg-white p-4 shadow-sm">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search plate or vehicle code"
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm text-slate-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label htmlFor="status-filter" className="text-sm font-medium text-slate-700">
+            Status
+          </label>
+          <select
+            id="status-filter"
+            value={statusFilter}
+            onChange={(e) => onStatusChange(e.target.value as VehicleStatus | '')}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+          >
+            {STATUS_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-medium text-slate-700">Type:</span>
+        {TYPE_OPTIONS.map((option) => {
+          const active = typeFilter === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onTypeChange(option.value)}
+              className={[
+                'rounded-full px-3 py-1 text-sm font-medium transition-colors',
+                active
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200',
+              ].join(' ')}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

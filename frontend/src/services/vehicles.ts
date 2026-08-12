@@ -1,0 +1,64 @@
+import { api } from './api';
+import type { Vehicle, VehicleStatus, VehicleType, LicenseStatus } from '../types';
+
+export interface VehicleLatest {
+  vehicle_id: number;
+  latitude: number | null;
+  longitude: number | null;
+  speed_kmh: number | null;
+  status: VehicleStatus;
+  recorded_at: string | null;
+  // Device info is not guaranteed by the API contract but may be present.
+  device_serial?: string | null;
+  sim_number?: string | null;
+}
+
+export type VehicleOut = Vehicle & {
+  latest?: VehicleLatest | null;
+};
+
+export interface VehicleCreate {
+  registration_no: string;
+  vehicle_code: string;
+  vehicle_type: VehicleType;
+  speed_limit_kmh?: number | null;
+  license_status: LicenseStatus;
+  license_expiry?: string | null;
+}
+
+export type VehicleUpdate = Partial<VehicleCreate>;
+
+export interface VehicleListParams {
+  q?: string;
+  status?: VehicleStatus | '';
+  type?: VehicleType | '';
+}
+
+export async function getVehicles(params: VehicleListParams = {}): Promise<VehicleOut[]> {
+  const query: Record<string, string> = {};
+  if (params.q) query.q = params.q;
+  if (params.status) query.status = params.status;
+  if (params.type) query.type = params.type;
+
+  const response = await api.get<VehicleOut[]>('/vehicles', { params: query });
+  return response.data;
+}
+
+export async function getVehicle(id: number): Promise<VehicleOut> {
+  const response = await api.get<VehicleOut>(`/vehicles/${id}`);
+  return response.data;
+}
+
+export async function createVehicle(data: VehicleCreate): Promise<VehicleOut> {
+  const response = await api.post<VehicleOut>('/vehicles', data);
+  return response.data;
+}
+
+export async function updateVehicle(id: number, data: VehicleUpdate): Promise<VehicleOut> {
+  const response = await api.patch<VehicleOut>(`/vehicles/${id}`, data);
+  return response.data;
+}
+
+export async function deleteVehicle(id: number): Promise<void> {
+  await api.delete(`/vehicles/${id}`);
+}
