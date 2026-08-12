@@ -17,6 +17,7 @@ dependencies = [
     "httpx",
     "pytest",
     "pytest-asyncio",
+    "async-asgi-testclient",
 ]
 
 [build-system]

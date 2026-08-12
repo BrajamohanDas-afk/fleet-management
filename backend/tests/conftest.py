@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -20,10 +22,57 @@ from app.models import (  # noqa: F401
 TEST_DATABASE_URL = settings.DATABASE_URL
 
 
+class FakePubSub:
+    def __init__(self, redis: "FakeRedis"):
+        self._redis = redis
+        self._channels: set[str] = set()
+        self._queue: asyncio.Queue = asyncio.Queue()
+
+    async def subscribe(self, *channels: str):
+        for channel in channels:
+            self._channels.add(channel)
+            self._redis._pubsubs.setdefault(channel, []).append(self)
+            await self._queue.put(
+                {"type": "subscribe", "pattern": None, "channel": channel, "data": None}
+            )
+
+    async def unsubscribe(self, *channels: str):
+        for channel in channels or list(self._channels):
+            self._channels.discard(channel)
+            subs = self._redis._pubsubs.get(channel, [])
+            if self in subs:
+                subs.remove(self)
+            await self._queue.put(
+                {
+                    "type": "unsubscribe",
+                    "pattern": None,
+                    "channel": channel,
+                    "data": None,
+                }
+            )
+
+    async def listen(self):
+        while True:
+            msg = await self._queue.get()
+            yield msg
+
+    def _put(self, channel: str, message: str):
+        self._queue.put_nowait(
+            {"type": "message", "pattern": None, "channel": channel, "data": message}
+        )
+
+    async def close(self):
+        pass
+
+
 class FakeRedis:
     def __init__(self):
         self.hashes: dict[str, dict[str, str]] = {}
         self.published: list[tuple[str, str]] = []
+        self._pubsubs: dict[str, list[FakePubSub]] = {}
+
+    def pubsub(self) -> FakePubSub:
+        return FakePubSub(self)
 
     async def hset(self, name, key=None, value=None, mapping=None):
         h = self.hashes.setdefault(name, {})
@@ -40,6 +89,8 @@ class FakeRedis:
 
     async def publish(self, channel, message):
         self.published.append((channel, message))
+        for sub in self._pubsubs.get(channel, []):
+            sub._put(channel, message)
 
 
 @pytest_asyncio.fixture

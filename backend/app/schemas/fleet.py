@@ -17,5 +17,7 @@ class FleetPositionOut(BaseModel):
     longitude: float | None = None
     speed_kmh: float | None = None
     heading_deg: float | None = None
+    ignition_on: bool | None = None
     status: VehicleStatus
     recorded_at: datetime | None = None
+    received_at: datetime | None = None

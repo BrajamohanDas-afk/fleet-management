@@ -103,6 +103,7 @@ async def ingest_telemetry(
                     "longitude": longitude,
                     "speed_kmh": speed_kmh,
                     "heading_deg": heading_deg,
+                    "ignition_on": ignition_on,
                     "status": status.value,
                     "recorded_at": recorded_at.isoformat(),
                     "received_at": received_at.isoformat(),
