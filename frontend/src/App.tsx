@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { VideoPanelProvider } from './contexts/VideoPanelContext';
+import DashboardLayout from './components/layout/DashboardLayout';
 import Vehicles from './pages/Vehicles';
 import VehicleLocation from './pages/VehicleLocation';
 import VideoTelematics from './pages/VideoTelematics';
@@ -7,14 +8,30 @@ import VideoTelematics from './pages/VideoTelematics';
 export default function App() {
   return (
     <Routes>
-      <Route path="/dashboard/vehicles" element={<Vehicles />} />
-      <Route path="/dashboard/location" element={<VehicleLocation />} />
+      <Route
+        path="/dashboard/vehicles"
+        element={
+          <DashboardLayout>
+            <Vehicles />
+          </DashboardLayout>
+        }
+      />
+      <Route
+        path="/dashboard/location"
+        element={
+          <DashboardLayout>
+            <VehicleLocation />
+          </DashboardLayout>
+        }
+      />
       <Route
         path="/dashboard/video"
         element={
-          <VideoPanelProvider>
-            <VideoTelematics />
-          </VideoPanelProvider>
+          <DashboardLayout>
+            <VideoPanelProvider>
+              <VideoTelematics />
+            </VideoPanelProvider>
+          </DashboardLayout>
         }
       />
       <Route path="/" element={<Navigate to="/dashboard/vehicles" replace />} />
