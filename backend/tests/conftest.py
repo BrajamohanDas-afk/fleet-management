@@ -3,6 +3,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.api.deps import get_redis
 from app.core.config import settings
 from app.core.database import Base, get_db
 from app.main import app
@@ -18,50 +19,97 @@ from app.models import (  # noqa: F401
 
 TEST_DATABASE_URL = settings.DATABASE_URL
 
-engine = create_async_engine(TEST_DATABASE_URL)
-TestingSessionLocal = async_sessionmaker(
-    engine,
-    expire_on_commit=False,
-    class_=AsyncSession,
-)
+
+class FakeRedis:
+    def __init__(self):
+        self.hashes: dict[str, dict[str, str]] = {}
+        self.published: list[tuple[str, str]] = []
+
+    async def hset(self, name, key=None, value=None, mapping=None):
+        h = self.hashes.setdefault(name, {})
+        if mapping is not None:
+            h.update(mapping)
+        elif key is not None:
+            h[key] = value
+
+    async def hgetall(self, name):
+        return self.hashes.get(name, {})
+
+    async def hget(self, name, key):
+        return self.hashes.get(name, {}).get(key)
+
+    async def publish(self, channel, message):
+        self.published.append((channel, message))
 
 
-async def override_get_db() -> AsyncSession:
-    async with TestingSessionLocal() as session:
-        yield session
+@pytest_asyncio.fixture
+async def fake_redis() -> FakeRedis:
+    return FakeRedis()
 
 
-app.dependency_overrides[get_db] = override_get_db
-
-
-@pytest_asyncio.fixture(scope="session")
-async def db_engine():
-    yield engine
-    await engine.dispose()
+@pytest_asyncio.fixture(autouse=True)
+async def override_redis(fake_redis: FakeRedis):
+    app.dependency_overrides[get_redis] = lambda: fake_redis
+    yield
+    app.dependency_overrides.pop(get_redis, None)
 
 
 @pytest_asyncio.fixture
 async def db() -> AsyncSession:
     """Provide a database session rolled back after each test."""
     test_engine = create_async_engine(TEST_DATABASE_URL)
-    TestingSession = async_sessionmaker(
-        test_engine,
-        expire_on_commit=False,
-        class_=AsyncSession,
-    )
     async with test_engine.connect() as connection:
         trans = await connection.begin()
-        session = TestingSession(bind=connection)
+        TestingSession = async_sessionmaker(
+            connection,
+            expire_on_commit=False,
+            class_=AsyncSession,
+        )
+        session = TestingSession()
         yield session
         await session.close()
         await trans.rollback()
     await test_engine.dispose()
 
 
-@pytest.fixture
-async def client() -> AsyncClient:
+@pytest_asyncio.fixture
+async def clean_db(db: AsyncSession) -> AsyncSession:
+    """Truncate mutable tables so tests start from a known empty state.
+
+    The truncation happens inside the test transaction and is rolled back at
+    the end of the test, so seeded data is restored for the next test run.
+    """
+    from sqlalchemy import text
+
+    await db.execute(
+        text(
+            "TRUNCATE TABLE "
+            "device_sessions, video_clips, telemetry_points, device_channels, "
+            "devices, vehicle_latest, vehicles "
+            "RESTART IDENTITY CASCADE"
+        )
+    )
+    await db.flush()
+    return db
+
+
+@pytest_asyncio.fixture
+async def client(db) -> AsyncClient:
+    """HTTP client with DB dependency wired to the test transaction."""
+    app.dependency_overrides[get_db] = lambda: db
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
     ) as ac:
         yield ac
+    app.dependency_overrides.pop(get_db, None)
+
+
+@pytest_asyncio.fixture
+async def auth_headers(client) -> dict[str, str]:
+    response = await client.post(
+        "/api/auth/login", json={"username": "admin", "password": "admin"}
+    )
+    assert response.status_code == 200
+    token = response.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}

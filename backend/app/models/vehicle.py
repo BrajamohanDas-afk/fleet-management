@@ -2,7 +2,7 @@ import enum
 from datetime import date, datetime
 
 from sqlalchemy import String, Float, Date, DateTime, func, Enum as SQLEnum
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
@@ -42,4 +42,11 @@ class Vehicle(Base):
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
+    )
+
+    latest: Mapped["VehicleLatest"] = relationship(
+        "VehicleLatest",
+        back_populates="vehicle",
+        uselist=False,
+        cascade="all, delete-orphan",
     )

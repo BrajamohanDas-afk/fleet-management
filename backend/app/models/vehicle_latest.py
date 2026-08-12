@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, func, Enum as SQLEnum
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 from app.services.status_service import VehicleStatus
@@ -42,3 +42,5 @@ class VehicleLatest(Base):
         onupdate=func.now(),
         nullable=False,
     )
+
+    vehicle: Mapped["Vehicle"] = relationship("Vehicle", back_populates="latest")

@@ -5,6 +5,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.telemetry_point import TelemetryPoint
+from app.models.vehicle import Vehicle
 from app.models.vehicle_latest import VehicleLatest
 from app.repositories import device_repository, telemetry_repository
 from app.services.status_service import VehicleStatus, derive_status
@@ -51,6 +52,10 @@ async def ingest_telemetry(
     if device is None:
         return None
 
+    vehicle = await db.get(Vehicle, device.vehicle_id)
+    if vehicle is None:
+        return None
+
     device.last_seen_at = received_at
 
     vehicle_latest = await db.get(VehicleLatest, device.vehicle_id)
@@ -83,5 +88,27 @@ async def ingest_telemetry(
         "received_at": received_at.isoformat(),
     }
     await redis.publish("fleet:telemetry", json.dumps(payload))
+
+    # Persist latest state to Redis hash for fast fleet reads.
+    await redis.hset(
+        "fleet:latest",
+        mapping={
+            str(device.vehicle_id): json.dumps(
+                {
+                    "vehicle_id": device.vehicle_id,
+                    "registration_no": vehicle.registration_no if vehicle else None,
+                    "vehicle_code": vehicle.vehicle_code if vehicle else None,
+                    "vehicle_type": vehicle.vehicle_type.value if vehicle else None,
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "speed_kmh": speed_kmh,
+                    "heading_deg": heading_deg,
+                    "status": status.value,
+                    "recorded_at": recorded_at.isoformat(),
+                    "received_at": received_at.isoformat(),
+                }
+            )
+        },
+    )
 
     return point

@@ -1,0 +1,147 @@
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.vehicle import LicenseStatus, Vehicle, VehicleType
+from app.models.vehicle_latest import VehicleLatest
+from app.services.status_service import VehicleStatus
+
+
+@pytest.fixture
+async def sample_vehicles(clean_db, db: AsyncSession):
+    vehicles = []
+    statuses = [VehicleStatus.moving, VehicleStatus.standing, VehicleStatus.offline]
+    for i, reg in enumerate(["TEST001", "TEST002", "TEST003"]):
+        v = Vehicle(
+            registration_no=reg,
+            vehicle_code=f"V{i+1:03d}",
+            vehicle_type=VehicleType.car if i < 2 else VehicleType.truck,
+            license_status=LicenseStatus.valid,
+            license_expiry=None,
+        )
+        db.add(v)
+        await db.flush()
+        vehicles.append(v)
+
+        db.add(
+            VehicleLatest(
+                vehicle_id=v.id,
+                device_id=None,
+                status=statuses[i],
+                latitude=17.4 + i * 0.01,
+                longitude=78.5 + i * 0.01,
+                speed_kmh=float(i * 10),
+            )
+        )
+
+    await db.flush()
+    return vehicles
+
+
+async def test_list_vehicles(client, auth_headers, sample_vehicles):
+    response = await client.get("/api/vehicles", headers=auth_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 3
+    ids = {v["id"] for v in data}
+    assert ids == {v.id for v in sample_vehicles}
+
+
+async def test_create_vehicle(client, auth_headers):
+    payload = {
+        "registration_no": "NEW001",
+        "vehicle_code": "VN001",
+        "vehicle_type": "car",
+        "speed_limit_kmh": 80.0,
+        "license_status": "valid",
+    }
+    response = await client.post("/api/vehicles", json=payload, headers=auth_headers)
+    assert response.status_code == 201
+    data = response.json()
+    assert data["registration_no"] == "NEW001"
+    assert data["vehicle_code"] == "VN001"
+    assert data["vehicle_type"] == "car"
+
+    # Verify persistence via GET.
+    get_response = await client.get(f"/api/vehicles/{data['id']}", headers=auth_headers)
+    assert get_response.status_code == 200
+    assert get_response.json()["registration_no"] == "NEW001"
+
+
+async def test_create_vehicle_duplicate_registration(
+    client, auth_headers, sample_vehicles
+):
+    payload = {
+        "registration_no": "TEST001",
+        "vehicle_code": "DUPLICATE",
+        "vehicle_type": "car",
+        "license_status": "valid",
+    }
+    response = await client.post("/api/vehicles", json=payload, headers=auth_headers)
+    assert response.status_code == 409
+
+
+async def test_get_vehicle(client, auth_headers, sample_vehicles):
+    v = sample_vehicles[0]
+    response = await client.get(f"/api/vehicles/{v.id}", headers=auth_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == v.id
+    assert data["registration_no"] == v.registration_no
+    assert data["latest"]["status"] == "moving"
+
+
+async def test_update_vehicle(client, auth_headers, sample_vehicles, db: AsyncSession):
+    v = sample_vehicles[0]
+    payload = {"speed_limit_kmh": 120.0}
+    response = await client.patch(
+        f"/api/vehicles/{v.id}", json=payload, headers=auth_headers
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["speed_limit_kmh"] == 120.0
+
+    await db.refresh(v)
+    assert v.speed_limit_kmh == 120.0
+
+
+async def test_delete_vehicle(client, auth_headers, sample_vehicles, db: AsyncSession):
+    v = sample_vehicles[0]
+    response = await client.delete(f"/api/vehicles/{v.id}", headers=auth_headers)
+    assert response.status_code == 204
+
+    deleted = await db.get(Vehicle, v.id)
+    assert deleted is None
+
+
+async def test_search_vehicles(client, auth_headers, sample_vehicles):
+    response = await client.get(
+        "/api/vehicles?q=TEST001", headers=auth_headers
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["registration_no"] == "TEST001"
+
+    response = await client.get("/api/vehicles?q=V002", headers=auth_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["vehicle_code"] == "V002"
+
+
+async def test_status_filter(client, auth_headers, sample_vehicles):
+    response = await client.get(
+        "/api/vehicles?status=moving", headers=auth_headers
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["latest"]["status"] == "moving"
+
+
+async def test_type_filter(client, auth_headers, sample_vehicles):
+    response = await client.get("/api/vehicles?type=truck", headers=auth_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["vehicle_type"] == "truck"
