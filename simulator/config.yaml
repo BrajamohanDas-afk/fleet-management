@@ -1,0 +1,80 @@
+api_base_url: http://api:8000/api
+dev_device_key: dev-device-key
+auth:
+  username: admin
+  password: admin
+mediamtx_rtsp_host: rtsp://mediamtx:8554
+telemetry_interval_seconds: 5
+
+devices:
+  - device_id: 1
+    device_serial: DEV001
+    route: hitech_city_loop
+    video_enabled: true
+    channels:
+      - channel_no: 1
+        label: Front
+        stream_path: device-1-ch1
+      - channel_no: 2
+        label: Rear
+        stream_path: device-1-ch2
+    # Per-device fault injection overrides the global defaults below.
+    fault_injection:
+      drop_frames: false
+      stall_seconds: 0
+      jitter: false
+      disconnect_every_seconds: 0
+
+  - device_id: 2
+    device_serial: DEV002
+    route: gachibowli_loop
+    video_enabled: true
+    channels:
+      - channel_no: 1
+        label: Front
+        stream_path: device-2-ch1
+      - channel_no: 2
+        label: Rear
+        stream_path: device-2-ch2
+
+  - device_id: 3
+    device_serial: DEV003
+    route: secunderabad_loop
+    video_enabled: true
+    channels:
+      - channel_no: 1
+        label: Front
+        stream_path: device-3-ch1
+      - channel_no: 2
+        label: Rear
+        stream_path: device-3-ch2
+
+  - device_id: 4
+    device_serial: DEV004
+    route: kukatpally_loop
+    video_enabled: true
+    channels:
+      - channel_no: 1
+        label: Front
+        stream_path: device-4-ch1
+      - channel_no: 2
+        label: Cabin
+        stream_path: device-4-ch2
+
+  - device_id: 5
+    device_serial: DEV005
+    route: lb_nagar_loop
+    video_enabled: true
+    channels:
+      - channel_no: 1
+        label: Front
+        stream_path: device-5-ch1
+      - channel_no: 2
+        label: Rear
+        stream_path: device-5-ch2
+
+fault_injection:
+  drop_frames: false
+  stall_seconds: 0
+  jitter: false
+  disconnect_every_seconds: 0

@@ -84,7 +84,9 @@ def _derive_channel_state(
 
 
 async def _query_mediamtx_path_info(stream_path: str) -> dict[str, Any] | None:
-    base = f"http://{settings.MEDIAMTX_HOST}:{settings.MEDIAMTX_HTTP_PORT}"
+    # Query the MediaMTX control API, which may be on a different port than WHEP.
+    api_port = getattr(settings, "MEDIAMTX_API_PORT", settings.MEDIAMTX_HTTP_PORT)
+    base = f"http://{settings.MEDIAMTX_HOST}:{api_port}"
     endpoints = [
         f"{base}/v3/paths/get/{stream_path}",
         f"{base}/v3/config/paths/get/{stream_path}",

@@ -101,6 +101,7 @@ async def get_positions(
                 longitude=data.get("longitude"),
                 speed_kmh=data.get("speed_kmh"),
                 heading_deg=data.get("heading_deg"),
+                ignition_on=data.get("ignition_on"),
                 status=vehicle_status,
                 recorded_at=recorded_at,
             )

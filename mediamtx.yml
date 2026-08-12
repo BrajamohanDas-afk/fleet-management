@@ -1,0 +1,33 @@
+# Minimal MediaMTX configuration for the dev fleet dashboard.
+# The control API is exposed on port 8889 without authentication for local development.
+
+api: yes
+# The backend health endpoint queries the MediaMTX API on this port.
+apiAddress: :8889
+apiAllowOrigins: ["*"]
+
+# Move WebRTC/WHEP to a separate port so it does not collide with the API.
+webrtc: yes
+webrtcAddress: :8890
+webrtcAllowOrigins: ["*"]
+
+authMethod: internal
+authInternalUsers:
+  - user: any
+    pass:
+    ips: []
+    permissions:
+      - action: publish
+      - action: read
+      - action: playback
+      - action: api
+      - action: metrics
+
+pathDefaults:
+  source: publisher
+  overridePublisher: true
+
+# Allow any dynamic path to be published by a client.
+paths:
+  all_others:
+    source: publisher

@@ -29,9 +29,12 @@ services:
     container_name: fleet-mediamtx
     ports:
       - "8889:8889"
+      - "8890:8890"
       - "8554:8554"
       - "8189:8189"
       - "1935:1935"
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml
     networks:
       - fleet-net
 
@@ -50,7 +53,8 @@ services:
       ENV: dev
       MEDIAMTX_HOST: mediamtx
       MEDIAMTX_RTSP_PORT: "8554"
-      MEDIAMTX_HTTP_PORT: "8889"
+      MEDIAMTX_HTTP_PORT: "8890"
+      MEDIAMTX_API_PORT: "8889"
       DEV_DEVICE_KEY: dev-device-key
     depends_on:
       db:
@@ -72,12 +76,23 @@ services:
     # Placeholder service for the Vite/React dashboard.
 
   simulator:
-    image: python:3.12-slim
+    build:
+      context: ./simulator
+      dockerfile: Dockerfile
     container_name: fleet-simulator
-    command: sleep infinity
+    depends_on:
+      api:
+        condition: service_started
+      mediamtx:
+        condition: service_started
     networks:
       - fleet-net
-    # Placeholder service for the GPS + H.264 dev agent.
+    # Webcam passthrough is platform-dependent. On Linux hosts with a V4L2
+    # device, uncomment the lines below to expose /dev/video0 to the container.
+    # The simulator automatically falls back to a generated test pattern when
+    # no webcam is available, so this block is optional.
+    # devices:
+    #   - /dev/video0:/dev/video0
 
 networks:
   fleet-net:

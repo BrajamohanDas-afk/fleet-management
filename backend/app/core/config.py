@@ -10,7 +10,10 @@ class Settings(BaseSettings):
     ENV: str = "dev"
     MEDIAMTX_HOST: str = "mediamtx"
     MEDIAMTX_RTSP_PORT: int = 8554
-    MEDIAMTX_HTTP_PORT: int = 8889
+    # WHEP/WebRTC is served on the MediaMTX HTTP port.
+    MEDIAMTX_HTTP_PORT: int = 8890
+    # MediaMTX control API port (v3/paths/list etc.).
+    MEDIAMTX_API_PORT: int = 8889
     DEV_DEVICE_KEY: str = "dev-device-key"
 
 
