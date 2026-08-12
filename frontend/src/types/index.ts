@@ -62,10 +62,52 @@ export interface VehicleLatest {
 
 export interface FleetPosition extends VehicleLatest {
   registration_no: string;
+  vehicle_code: string;
   vehicle_type: VehicleType;
+  // Enrichment fields that may be supplied by the backend or merged from
+  // the vehicle registry for cards and counters.
+  sim_number?: string | null;
+  license_status?: LicenseStatus | null;
+  license_expiry?: string | null;
 }
 
 export interface VideoClip {
+  id: number;
+  device_id: number;
+  channel_no: number;
+  started_at: string;
+  ended_at: string | null;
+  file_path: string;
+  size_bytes: number | null;
+}
+
+export type ChannelState =
+  | 'idle'
+  | 'connecting'
+  | 'live'
+  | 'degraded'
+  | 'reconnecting'
+  | 'offline';
+
+export interface DeviceChannelOut {
+  channel_no: number;
+  label: string;
+  stream_url: string;
+}
+
+export interface DeviceHealth {
+  channel_no: number;
+  label: string;
+  state: ChannelState;
+  last_frame_at: string | null;
+}
+
+export interface RecordingCreate {
+  channel_no: number;
+  duration_s: number;
+}
+
+export interface RecordingOut {
   id: number;
   device_id: number;
   channel_no: number;

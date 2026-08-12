@@ -3,11 +3,16 @@ import type { Vehicle, VehicleStatus, VehicleType, LicenseStatus } from '../type
 
 export interface VehicleLatest {
   vehicle_id: number;
+  device_id: number | null;
   latitude: number | null;
   longitude: number | null;
   speed_kmh: number | null;
-  status: VehicleStatus;
+  heading_deg: number | null;
+  ignition_on: boolean | null;
   recorded_at: string | null;
+  received_at: string | null;
+  status: VehicleStatus;
+  updated_at: string;
   // Device info is not guaranteed by the API contract but may be present.
   device_serial?: string | null;
   sim_number?: string | null;

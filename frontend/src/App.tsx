@@ -1,15 +1,14 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
+import { VideoPanelProvider } from './contexts/VideoPanelContext';
 import Login from './pages/Login';
 import Vehicles from './pages/Vehicles';
+import VehicleLocation from './pages/VehicleLocation';
+import VideoTelematics from './pages/VideoTelematics';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
-}
-
-function Placeholder({ title }: { title: string }) {
-  return <div>{title}</div>;
 }
 
 export default function App() {
@@ -28,7 +27,7 @@ export default function App() {
         path="/dashboard/location"
         element={
           <ProtectedRoute>
-            <Placeholder title="Location" />
+            <VehicleLocation />
           </ProtectedRoute>
         }
       />
@@ -36,7 +35,9 @@ export default function App() {
         path="/dashboard/video"
         element={
           <ProtectedRoute>
-            <Placeholder title="Video" />
+            <VideoPanelProvider>
+              <VideoTelematics />
+            </VideoPanelProvider>
           </ProtectedRoute>
         }
       />
