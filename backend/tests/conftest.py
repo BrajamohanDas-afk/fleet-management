@@ -40,6 +40,24 @@ async def db_engine():
     await engine.dispose()
 
 
+@pytest_asyncio.fixture
+async def db() -> AsyncSession:
+    """Provide a database session rolled back after each test."""
+    test_engine = create_async_engine(TEST_DATABASE_URL)
+    TestingSession = async_sessionmaker(
+        test_engine,
+        expire_on_commit=False,
+        class_=AsyncSession,
+    )
+    async with test_engine.connect() as connection:
+        trans = await connection.begin()
+        session = TestingSession(bind=connection)
+        yield session
+        await session.close()
+        await trans.rollback()
+    await test_engine.dispose()
+
+
 @pytest.fixture
 async def client() -> AsyncClient:
     async with AsyncClient(

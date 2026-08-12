@@ -1,7 +1,14 @@
-from app.models.vehicle_latest import VehicleStatus
+import enum
 
 STALE_SECONDS = 60
 OFFLINE_SECONDS = 15 * 60
+
+
+class VehicleStatus(str, enum.Enum):
+    moving = "moving"
+    standing = "standing"
+    stale = "stale"
+    offline = "offline"
 
 
 def derive_status(fix_age_seconds: float | None, speed_kmh: float | None) -> VehicleStatus:

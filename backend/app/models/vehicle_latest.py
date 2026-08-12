@@ -1,17 +1,10 @@
-import enum
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, func, Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
-
-
-class VehicleStatus(str, enum.Enum):
-    moving = "moving"
-    standing = "standing"
-    stale = "stale"
-    offline = "offline"
+from app.services.status_service import VehicleStatus
 
 
 class VehicleLatest(Base):

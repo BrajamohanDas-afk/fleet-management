@@ -1,9 +1,9 @@
 import pytest
 
-from app.models.vehicle_latest import VehicleStatus
 from app.services.status_service import (
     OFFLINE_SECONDS,
     STALE_SECONDS,
+    VehicleStatus,
     derive_status,
 )
 
