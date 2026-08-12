@@ -5,7 +5,6 @@ import {
   logout as logoutApi,
   getToken,
   setToken,
-  type LoginResponse,
 } from '../services/auth';
 import type { User } from '../types';
 
@@ -41,14 +40,7 @@ export function useAuth(): UseAuth {
       setIsLoading(true);
       setError(null);
       try {
-        let response: LoginResponse;
-
-        // Demo fallback until the backend auth endpoint is implemented.
-        if (username === 'admin' && password === 'admin') {
-          response = { access_token: 'demo-token', token_type: 'bearer' };
-        } else {
-          response = await loginApi(username, password);
-        }
+        const response = await loginApi(username, password);
 
         setToken(response.access_token);
         setUser({ id: 1, username });
