@@ -15,6 +15,7 @@ dependencies = [
     "passlib[bcrypt]",
     "bcrypt",
     "httpx",
+    "apscheduler",
     "pytest",
     "pytest-asyncio",
     "async-asgi-testclient",

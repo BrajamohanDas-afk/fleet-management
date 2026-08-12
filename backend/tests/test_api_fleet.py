@@ -99,4 +99,4 @@ async def test_positions_invalid_bbox(client, auth_headers):
     response = await client.get(
         "/api/fleet/positions?bbox=invalid", headers=auth_headers
     )
-    assert response.status_code == 400
+    assert response.status_code == 422

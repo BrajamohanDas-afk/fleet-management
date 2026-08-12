@@ -16,14 +16,14 @@ def _parse_bbox(bbox: str) -> tuple[float, float, float, float]:
     try:
         parts = [float(p.strip()) for p in bbox.split(",")]
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail="bbox must be four comma-separated numbers") from exc
+        raise HTTPException(status_code=422, detail="bbox must be four comma-separated numbers") from exc
     if len(parts) != 4:
-        raise HTTPException(status_code=400, detail="bbox must contain exactly four values: sw_lat,sw_lon,ne_lat,ne_lon")
+        raise HTTPException(status_code=422, detail="bbox must contain exactly four values: sw_lat,sw_lon,ne_lat,ne_lon")
     sw_lat, sw_lon, ne_lat, ne_lon = parts
     if not (-90 <= sw_lat <= 90 and -90 <= ne_lat <= 90):
-        raise HTTPException(status_code=400, detail="bbox latitude values must be between -90 and 90")
+        raise HTTPException(status_code=422, detail="bbox latitude values must be between -90 and 90")
     if not (-180 <= sw_lon <= 180 and -180 <= ne_lon <= 180):
-        raise HTTPException(status_code=400, detail="bbox longitude values must be between -180 and 180")
+        raise HTTPException(status_code=422, detail="bbox longitude values must be between -180 and 180")
     return sw_lat, sw_lon, ne_lat, ne_lon
 
 

@@ -5,14 +5,18 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import root_router
 from app.services import fleet_ws_service
+from app.tasks import shutdown_scheduler, start_scheduler
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: database and Redis clients are created lazily.
+    scheduler = start_scheduler()
+    app.state.scheduler = scheduler
     yield
     # Shutdown: stop the fleet WebSocket fan-out task if it is running.
     await fleet_ws_service.stop()
+    shutdown_scheduler()
 
 
 app = FastAPI(title="Fleet Dashboard API", lifespan=lifespan)
