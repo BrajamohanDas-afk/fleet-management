@@ -1,0 +1,84 @@
+services:
+  db:
+    image: postgres:16
+    container_name: fleet-db
+    environment:
+      POSTGRES_DB: fleet_db
+      POSTGRES_USER: fleet_user
+      POSTGRES_PASSWORD: fleet_pass
+    ports:
+      - "5432:5432"
+    networks:
+      - fleet-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fleet_user -d fleet_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    container_name: fleet-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - fleet-net
+
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: fleet-mediamtx
+    ports:
+      - "8889:8889"
+      - "8554:8554"
+      - "8189:8189"
+      - "1935:1935"
+    networks:
+      - fleet-net
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fleet-api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://fleet_user:fleet_pass@db:5432/fleet_db
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: dev-secret-change-me
+      ENV: dev
+      MEDIAMTX_HOST: mediamtx
+      MEDIAMTX_RTSP_PORT: "8554"
+      MEDIAMTX_HTTP_PORT: "8889"
+      DEV_DEVICE_KEY: dev-device-key
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      mediamtx:
+        condition: service_started
+    networks:
+      - fleet-net
+    volumes:
+      - ./backend:/app
+
+  frontend:
+    image: nginx:alpine
+    container_name: fleet-frontend
+    networks:
+      - fleet-net
+    # Placeholder service for the Vite/React dashboard.
+
+  simulator:
+    image: python:3.12-slim
+    container_name: fleet-simulator
+    command: sleep infinity
+    networks:
+      - fleet-net
+    # Placeholder service for the GPS + H.264 dev agent.
+
+networks:
+  fleet-net:
+    driver: bridge
