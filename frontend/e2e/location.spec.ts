@@ -14,7 +14,7 @@ test.describe('Vehicle Location page', () => {
     const map = page.locator('.leaflet-container');
     await expect(map).toBeVisible();
 
-    const feedIndicator = page.locator('text=Live Feed').or(page.locator('text=Feed Offline'));
+    const feedIndicator = page.getByTitle(/Live position feed/);
     await expect(feedIndicator).toBeVisible();
   });
 });

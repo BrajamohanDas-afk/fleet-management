@@ -1,9 +1,19 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
+import type { ReactNode } from 'react';
 import { VideoPanelProvider } from './contexts/VideoPanelContext';
 import DashboardLayout from './components/layout/DashboardLayout';
 import Vehicles from './pages/Vehicles';
 import VehicleLocation from './pages/VehicleLocation';
 import VideoTelematics from './pages/VideoTelematics';
+import Login from './pages/Login';
+import { getToken } from './services/auth';
+
+function ProtectedRoute({ children }: { children: ReactNode }) {
+  if (!getToken()) {
+    return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+}
 
 export default function App() {
   return (
@@ -11,31 +21,37 @@ export default function App() {
       <Route
         path="/dashboard/vehicles"
         element={
-          <DashboardLayout>
-            <Vehicles />
-          </DashboardLayout>
+          <ProtectedRoute>
+            <DashboardLayout>
+              <Vehicles />
+            </DashboardLayout>
+          </ProtectedRoute>
         }
       />
       <Route
         path="/dashboard/location"
         element={
-          <DashboardLayout>
-            <VehicleLocation />
-          </DashboardLayout>
+          <ProtectedRoute>
+            <DashboardLayout>
+              <VehicleLocation />
+            </DashboardLayout>
+          </ProtectedRoute>
         }
       />
       <Route
         path="/dashboard/video"
         element={
-          <DashboardLayout>
-            <VideoPanelProvider>
-              <VideoTelematics />
-            </VideoPanelProvider>
-          </DashboardLayout>
+          <ProtectedRoute>
+            <DashboardLayout>
+              <VideoPanelProvider>
+                <VideoTelematics />
+              </VideoPanelProvider>
+            </DashboardLayout>
+          </ProtectedRoute>
         }
       />
       <Route path="/" element={<Navigate to="/dashboard/vehicles" replace />} />
-      <Route path="/login" element={<Navigate to="/dashboard/vehicles" replace />} />
+      <Route path="/login" element={<Login />} />
       <Route path="*" element={<Navigate to="/dashboard/vehicles" replace />} />
     </Routes>
   );

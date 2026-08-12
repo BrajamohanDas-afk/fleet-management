@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     DATABASE_URL: str = "postgresql+asyncpg://fleet_user:fleet_pass@db:5432/fleet_db"
+    TEST_DATABASE_URL: str | None = None
     REDIS_URL: str = "redis://redis:6379/0"
     SECRET_KEY: str = "dev-secret-change-me"
     ENV: str = "dev"

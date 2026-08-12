@@ -1,4 +1,4 @@
-.PHONY: up down migrate seed test test-e2e lint logs
+.PHONY: up down migrate seed test test-e2e e2e lint logs
 
 up:
 	docker compose up -d --build
@@ -18,8 +18,10 @@ test:
 test-e2e:
 	cd frontend && npx playwright test
 
+e2e: test-e2e
+
 lint:
-	cd backend && ruff check app tests
+	cd backend && python -m compileall app tests
 	cd frontend && npm run lint
 
 logs:

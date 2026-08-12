@@ -1,4 +1,5 @@
 import asyncio
+import socket
 
 import pytest
 import pytest_asyncio
@@ -19,7 +20,17 @@ from app.models import (  # noqa: F401
     video_clip,
 )
 
-TEST_DATABASE_URL = settings.DATABASE_URL
+def _default_test_database_url() -> str:
+    if settings.TEST_DATABASE_URL:
+        return settings.TEST_DATABASE_URL
+    try:
+        socket.getaddrinfo("db", 5432)
+    except socket.gaierror:
+        return settings.DATABASE_URL.replace("@db:5432", "@localhost:15432")
+    return settings.DATABASE_URL
+
+
+TEST_DATABASE_URL = _default_test_database_url()
 
 
 class FakePubSub:

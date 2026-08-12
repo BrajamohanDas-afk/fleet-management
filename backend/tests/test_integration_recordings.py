@@ -70,8 +70,13 @@ async def test_device_recording_flow(client, clean_db: AsyncSession, auth_header
     # touched during finalization.
     assert clip.size_bytes is not None or Path(clip.file_path).exists() is False
 
-    # Download endpoint returns the file path even if ffmpeg produced no bytes.
+    # If ffmpeg produced a file, it is downloadable. If not, the endpoint fails
+    # cleanly instead of raising from FileResponse.
     download = await client.get(
         f"/api/recordings/{clip.id}/download", headers=auth_headers
     )
-    assert download.status_code == 200
+    if Path(clip.file_path).exists():
+        assert download.status_code == 200
+    else:
+        assert download.status_code == 404
+        assert download.json()["detail"] == "Recording file not found"

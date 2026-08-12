@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy import desc, select
@@ -34,8 +36,11 @@ async def download_recording(
     clip = await db.get(VideoClip, clip_id)
     if clip is None:
         raise HTTPException(status_code=404, detail="Recording not found")
+    file_path = Path(clip.file_path)
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Recording file not found")
     return FileResponse(
-        path=clip.file_path,
+        path=file_path,
         media_type="video/mp4",
-        filename=clip.file_path.split("/")[-1],
+        filename=file_path.name,
     )
