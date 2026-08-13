@@ -1,5 +1,11 @@
 import enum
+from typing import TYPE_CHECKING
 from datetime import date, datetime
+
+if TYPE_CHECKING:
+    from app.models.device import Device
+    from app.models.vehicle_latest import VehicleLatest
+
 
 from sqlalchemy import String, Float, Date, DateTime, func, Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -48,5 +54,10 @@ class Vehicle(Base):
         "VehicleLatest",
         back_populates="vehicle",
         uselist=False,
+        cascade="all, delete-orphan",
+    )
+    devices: Mapped[list["Device"]] = relationship(
+        "Device",
+        back_populates="vehicle",
         cascade="all, delete-orphan",
     )

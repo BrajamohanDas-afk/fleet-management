@@ -98,6 +98,15 @@ class FakeRedis:
     async def hget(self, name, key):
         return self.hashes.get(name, {}).get(key)
 
+    async def hdel(self, name, *keys):
+        h = self.hashes.get(name, {})
+        removed = 0
+        for key in keys:
+            if key in h:
+                del h[key]
+                removed += 1
+        return removed
+
     async def publish(self, channel, message):
         self.published.append((channel, message))
         for sub in self._pubsubs.get(channel, []):

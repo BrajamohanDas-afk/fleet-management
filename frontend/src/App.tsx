@@ -7,6 +7,7 @@ import VehicleLocation from './pages/VehicleLocation';
 import VideoTelematics from './pages/VideoTelematics';
 import Login from './pages/Login';
 import { getToken } from './services/auth';
+import { ThemeProvider } from './contexts/ThemeContext';
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   if (!getToken()) {
@@ -17,7 +18,8 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 
 export default function App() {
   return (
-    <Routes>
+    <ThemeProvider>
+      <Routes>
       <Route
         path="/dashboard/vehicles"
         element={
@@ -54,5 +56,6 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="*" element={<Navigate to="/dashboard/vehicles" replace />} />
     </Routes>
+    </ThemeProvider>
   );
 }

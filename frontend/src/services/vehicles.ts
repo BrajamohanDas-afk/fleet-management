@@ -20,6 +20,9 @@ export interface VehicleLatest {
 
 export type VehicleOut = Vehicle & {
   latest?: VehicleLatest | null;
+  device_id?: number | null;
+  device_serial?: string | null;
+  sim_number?: string | null;
 };
 
 export interface VehicleCreate {
@@ -29,6 +32,16 @@ export interface VehicleCreate {
   speed_limit_kmh?: number | null;
   license_status: LicenseStatus;
   license_expiry?: string | null;
+  device?: {
+    device_serial: string;
+    sim_number: string;
+    protocol: string;
+    cameras: Array<{
+      channel_no: number;
+      label: string;
+      rtsp_url: string;
+    }>;
+  } | null;
 }
 
 export type VehicleUpdate = Partial<VehicleCreate>;
@@ -66,4 +79,35 @@ export async function updateVehicle(id: number, data: VehicleUpdate): Promise<Ve
 
 export async function deleteVehicle(id: number): Promise<void> {
   await api.delete(`/vehicles/${id}`);
+}
+
+export interface CameraChannel {
+  id: number;
+  device_id: number;
+  channel_no: number;
+  label: string;
+  stream_path: string | null;
+  stream_url: string | null;
+  rtsp_url: string | null;
+}
+
+export interface CameraUpdateItem {
+  channel_no: number;
+  label?: string;
+  rtsp_url: string;
+}
+
+export async function getVehicleCameras(deviceId: number): Promise<CameraChannel[]> {
+  const response = await api.get<CameraChannel[]>(`/devices/${deviceId}/channels`);
+  return response.data;
+}
+
+export async function updateVehicleCameras(vehicleId: number, cameras: CameraUpdateItem[]): Promise<void> {
+  await api.patch(`/vehicles/${vehicleId}/cameras`, { cameras });
+}
+
+export async function testRtspUrl(rtspUrl: string, vehicleId?: number): Promise<{ status: string; detail?: string }> {
+  const path = vehicleId ? `/vehicles/${vehicleId}/cameras/test` : '/vehicles/cameras/test';
+  const response = await api.post<{ status: string; detail?: string }>(path, { rtsp_url: rtspUrl });
+  return response.data;
 }

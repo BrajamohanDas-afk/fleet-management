@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "dev-secret-change-me"
     ENV: str = "dev"
     MEDIAMTX_HOST: str = "mediamtx"
+    # Docker-internal hostname is not resolvable by a browser.  Keep this
+    # separate from MEDIAMTX_HOST, which is used for server-to-server calls.
+    MEDIAMTX_PUBLIC_HOST: str = "localhost"
     MEDIAMTX_RTSP_PORT: int = 8554
     # WHEP/WebRTC is served on the MediaMTX HTTP port.
     MEDIAMTX_HTTP_PORT: int = 8890

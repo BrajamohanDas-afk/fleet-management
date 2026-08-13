@@ -10,6 +10,8 @@ apiAllowOrigins: ["*"]
 webrtc: yes
 webrtcAddress: :8890
 webrtcAllowOrigins: ["*"]
+webrtcLocalUDPAddress: :8189
+webrtcAdditionalHosts: ["localhost", "127.0.0.1"]
 
 authMethod: internal
 authInternalUsers:

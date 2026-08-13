@@ -17,6 +17,11 @@ export async function getHealth(deviceId: number): Promise<DeviceHealth[]> {
   return response.data;
 }
 
+
+export async function startStreams(deviceId: number): Promise<{ started: number }> {
+  const response = await api.post<{ started: number }>(`/devices/${deviceId}/streams/start`);
+  return response.data;
+}
 export async function startRecording(
   deviceId: number,
   data: RecordingCreate

@@ -78,6 +78,7 @@ export function useVehicles(): UseVehiclesReturn {
     mutationFn: createVehicle,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+      void queryClient.invalidateQueries({ queryKey: ['devices'] });
     },
   });
 
@@ -86,6 +87,7 @@ export function useVehicles(): UseVehiclesReturn {
       updateVehicle(id, data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+      void queryClient.invalidateQueries({ queryKey: ['devices'] });
     },
   });
 
@@ -93,6 +95,7 @@ export function useVehicles(): UseVehiclesReturn {
     mutationFn: deleteVehicle,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+      void queryClient.invalidateQueries({ queryKey: ['devices'] });
     },
   });
 

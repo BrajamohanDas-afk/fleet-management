@@ -1,3 +1,4 @@
+from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, func, Enum as SQLEnum
@@ -11,11 +12,11 @@ class VehicleLatest(Base):
     __tablename__ = "vehicle_latest"
 
     vehicle_id: Mapped[int] = mapped_column(
-        ForeignKey("vehicles.id"),
+        ForeignKey("vehicles.id", ondelete="CASCADE"),
         primary_key=True,
     )
     device_id: Mapped[int | None] = mapped_column(
-        ForeignKey("devices.id"),
+        ForeignKey("devices.id", ondelete="SET NULL"),
         nullable=True,
     )
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)

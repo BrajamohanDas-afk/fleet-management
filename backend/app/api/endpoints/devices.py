@@ -19,6 +19,7 @@ from app.services.recording_service import (
     run_ffmpeg_recording,
     start_recording,
 )
+from app.services.stream_command_service import publish_stream_command
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -48,6 +49,42 @@ async def get_device_health(
     if device is None:
         raise HTTPException(status_code=404, detail="Device not found")
     return await get_channel_health(db, redis, device_id)
+
+
+@router.post("/{device_id}/streams/start", status_code=status.HTTP_202_ACCEPTED)
+async def start_device_streams(
+    device_id: int,
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+    current_user: dict = Depends(get_current_user),
+) -> dict[str, int]:
+    _ = current_user
+    device = await device_repository.get(db, device_id)
+    if device is None:
+        raise HTTPException(status_code=404, detail="Device not found")
+    if device.vehicle_id is None:
+        raise HTTPException(status_code=400, detail="Device is not assigned to a vehicle")
+
+    result = await db.execute(
+        select(DeviceChannel)
+        .where(DeviceChannel.device_id == device_id)
+        .order_by(DeviceChannel.channel_no)
+    )
+    channels = result.scalars().all()
+    started = 0
+    for channel in channels:
+        if not channel.rtsp_url:
+            continue
+        await publish_stream_command(
+            redis,
+            action="start",
+            vehicle_id=device.vehicle_id,
+            channel_no=channel.channel_no,
+            rtsp_url=channel.rtsp_url,
+        )
+        started += 1
+
+    return {"started": started}
 
 
 async def _record_and_finalize(

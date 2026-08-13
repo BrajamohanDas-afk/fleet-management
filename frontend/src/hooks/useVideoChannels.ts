@@ -9,6 +9,7 @@ export interface UseVideoChannelsReturn {
   health: DeviceHealth[];
   isLoading: boolean;
   error: Error | null;
+  refetch: () => Promise<DeviceChannelOut[]>;
 }
 
 export function useVideoChannels(deviceId: number | null): UseVideoChannelsReturn {
@@ -30,5 +31,12 @@ export function useVideoChannels(deviceId: number | null): UseVideoChannelsRetur
     health: healthQuery.data ?? [],
     isLoading: channelsQuery.isLoading || healthQuery.isLoading,
     error: (channelsQuery.error ?? healthQuery.error) as Error | null,
+    refetch: async () => {
+      const [channelsResult] = await Promise.all([
+        channelsQuery.refetch(),
+        healthQuery.refetch(),
+      ]);
+      return channelsResult.data ?? [];
+    },
   };
 }

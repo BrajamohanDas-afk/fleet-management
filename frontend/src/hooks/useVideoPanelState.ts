@@ -39,21 +39,27 @@ function computeStateFromHealth(
   health: DeviceHealth | null,
   lastFrameAt: Date | null
 ): PanelState {
+  if (current === 'idle') return current;
+
   if (!health) {
-    if (current === 'idle' || current === 'offline') return current;
+    if (current === 'offline') return current;
     return 'reconnecting';
   }
 
   if (health.state === 'offline') return 'offline';
 
+  if (health.state === 'live' || health.state === 'connecting') {
+    if (current === 'connecting' || current === 'reconnecting') return current;
+    return 'live';
+  }
+
   const frameTime = health.last_frame_at
     ? new Date(health.last_frame_at)
     : lastFrameAt;
-  const ageMs = frameTime ? Date.now() - frameTime.getTime() : Infinity;
+  const ageMs = frameTime ? Date.now() - frameTime.getTime() : 0;
 
   if (ageMs > RECONNECT_AGE_MS) return 'reconnecting';
   if (ageMs > DEGRADED_AGE_MS || health.state === 'degraded') return 'degraded';
-  if (health.state === 'live' || health.state === 'connecting') return 'live';
   return current;
 }
 

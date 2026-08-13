@@ -36,27 +36,29 @@ export default function VehicleFilters({
   onTypeChange,
 }: VehicleFiltersProps) {
   return (
-    <div className="space-y-4 rounded-xl bg-white p-4 shadow-sm">
+    <div className="space-y-4 rounded-xl p-4 shadow-sm" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-primary)' }}>
       <div className="flex flex-col gap-4 md:flex-row md:items-center">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: 'var(--text-tertiary)' }} />
           <input
             type="text"
             placeholder="Search plate or vehicle code"
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm text-slate-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            className="w-full rounded-lg border py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
+            style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-secondary)', color: 'var(--text-primary)' }}
           />
         </div>
         <div className="flex items-center gap-2">
-          <label htmlFor="status-filter" className="text-sm font-medium text-slate-700">
+          <label htmlFor="status-filter" className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
             Status
           </label>
           <select
             id="status-filter"
             value={statusFilter}
             onChange={(e) => onStatusChange(e.target.value as VehicleStatus | '')}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            className="app-select"
+            style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-secondary)', color: 'var(--text-primary)' }}
           >
             {STATUS_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -68,7 +70,7 @@ export default function VehicleFilters({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-medium text-slate-700">Type:</span>
+        <span className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Type:</span>
         {TYPE_OPTIONS.map((option) => {
           const active = typeFilter === option.value;
           return (
@@ -76,12 +78,11 @@ export default function VehicleFilters({
               key={option.value}
               type="button"
               onClick={() => onTypeChange(option.value)}
-              className={[
-                'rounded-full px-3 py-1 text-sm font-medium transition-colors',
-                active
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200',
-              ].join(' ')}
+              className="rounded-full px-3 py-1 text-sm font-medium transition-colors hover:opacity-80"
+              style={{
+                backgroundColor: active ? 'var(--accent-600)' : 'var(--bg-tertiary)',
+                color: active ? 'var(--text-inverse)' : 'var(--text-primary)'
+              }}
             >
               {option.label}
             </button>
