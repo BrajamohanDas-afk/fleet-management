@@ -2,6 +2,12 @@ import json
 from datetime import datetime, timezone
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.device import ConnectionStatus, Device, DeviceSource, Protocol
+from app.models.vehicle import LicenseStatus, Vehicle, VehicleType
+from app.models.vehicle_latest import VehicleLatest
+from app.services.status_service import VehicleStatus
 
 
 @pytest.fixture
@@ -61,6 +67,52 @@ async def test_positions(client, auth_headers, fleet_redis_state):
     assert len(data) == 3
     ids = {p["vehicle_id"] for p in data}
     assert ids == {1, 2, 3}
+
+
+async def test_positions_db_fallback_when_redis_empty(
+    clean_db, client, auth_headers, db: AsyncSession
+):
+    vehicle = Vehicle(
+        registration_no="TS09AB1234",
+        vehicle_code="VH001",
+        vehicle_type=VehicleType.truck,
+        license_status=LicenseStatus.valid,
+    )
+    db.add(vehicle)
+    await db.flush()
+    device = Device(
+        vehicle_id=vehicle.id,
+        device_serial="vh001-10",
+        sim_number="n/a",
+        protocol=Protocol.other,
+        source=DeviceSource.traccar,
+        external_device_identifier="vh001-10",
+        connection_status=ConnectionStatus.connected,
+    )
+    db.add(device)
+    await db.flush()
+    db.add(
+        VehicleLatest(
+            vehicle_id=vehicle.id,
+            device_id=device.id,
+            latitude=23.8129052,
+            longitude=86.4381768,
+            speed_kmh=0.0,
+            heading_deg=0.0,
+            status=VehicleStatus.stale,
+            recorded_at=datetime.now(timezone.utc),
+            received_at=datetime.now(timezone.utc),
+        )
+    )
+    await db.flush()
+
+    response = await client.get("/api/fleet/positions", headers=auth_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["vehicle_id"] == vehicle.id
+    assert data[0]["source"] == "traccar"
+    assert data[0]["connection_status"] == "connected"
 
 
 async def test_positions_status_filter(client, auth_headers, fleet_redis_state):

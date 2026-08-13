@@ -1,7 +1,14 @@
-from sqlalchemy import func, select
+from sqlalchemy import delete as sa_delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.device import Device
+from app.models.device_channel import DeviceChannel
+from app.models.device_session import DeviceSession
+from app.models.share_link import ShareLink
+from app.models.telemetry_point import TelemetryPoint
 from app.models.vehicle import Vehicle, VehicleType, LicenseStatus
+from app.models.vehicle_latest import VehicleLatest
+from app.models.video_clip import VideoClip
 from app.services.license_service import needs_renewal
 
 
@@ -33,6 +40,14 @@ async def update(db: AsyncSession, db_obj: Vehicle, obj_in: dict) -> Vehicle:
 
 
 async def delete(db: AsyncSession, db_obj: Vehicle) -> None:
+    device_ids = select(Device.id).where(Device.vehicle_id == db_obj.id)
+    await db.execute(sa_delete(TelemetryPoint).where(TelemetryPoint.device_id.in_(device_ids)))
+    await db.execute(sa_delete(DeviceChannel).where(DeviceChannel.device_id.in_(device_ids)))
+    await db.execute(sa_delete(DeviceSession).where(DeviceSession.device_id.in_(device_ids)))
+    await db.execute(sa_delete(VideoClip).where(VideoClip.device_id.in_(device_ids)))
+    await db.execute(sa_delete(VehicleLatest).where(VehicleLatest.vehicle_id == db_obj.id))
+    await db.execute(sa_delete(ShareLink).where(ShareLink.vehicle_id == db_obj.id))
+    await db.execute(sa_delete(Device).where(Device.vehicle_id == db_obj.id))
     await db.delete(db_obj)
     await db.flush()
 

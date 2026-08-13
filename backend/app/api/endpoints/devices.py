@@ -7,11 +7,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_redis
+from app.core.config import settings
 from app.core.database import AsyncSessionLocal, get_db
 from app.models.device_channel import DeviceChannel
 from app.models.video_clip import VideoClip
 from app.repositories import device_repository
-from app.schemas.device import DeviceChannelHealthOut, DeviceChannelOut
+from app.schemas.device import DeviceChannelHealthOut, DeviceChannelOut, DeviceCreate, DeviceOut, DeviceUpdate, PairingOut
 from app.schemas.recording import RecordingCreate, RecordingOut
 from app.services.device_service import get_channel_health, get_device_channels
 from app.services.recording_service import (
@@ -22,6 +23,50 @@ from app.services.recording_service import (
 from app.services.stream_command_service import publish_stream_command
 
 router = APIRouter(prefix="/devices", tags=["devices"])
+
+
+@router.patch("/{device_id}", response_model=DeviceOut)
+async def update_device(device_id: int, payload: DeviceUpdate, db: AsyncSession = Depends(get_db), current_user: dict = Depends(get_current_user)) -> DeviceOut:
+    _ = current_user
+    device = await device_repository.get(db, device_id)
+    if device is None:
+        raise HTTPException(status_code=404, detail="Device not found")
+    updated = await device_repository.update(db, device, payload.model_dump(exclude_unset=True))
+    await db.commit()
+    return DeviceOut.model_validate(updated)
+
+
+@router.delete("/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_device(device_id: int, db: AsyncSession = Depends(get_db), current_user: dict = Depends(get_current_user)) -> None:
+    _ = current_user
+    device = await device_repository.get(db, device_id)
+    if device is None:
+        raise HTTPException(status_code=404, detail="Device not found")
+    await device_repository.delete(db, device)
+    await db.commit()
+
+
+@router.post("/{device_id}/pairing", response_model=PairingOut)
+async def device_pairing(device_id: int, db: AsyncSession = Depends(get_db), current_user: dict = Depends(get_current_user)) -> PairingOut:
+    _ = current_user
+    device = await device_repository.get(db, device_id)
+    if device is None:
+        raise HTTPException(status_code=404, detail="Device not found")
+    identifier = device.external_device_identifier or device.device_serial
+    device.external_device_identifier = identifier
+    await db.flush()
+    await db.commit()
+    return PairingOut(
+        device_id=device.id,
+        server_url=settings.TRACCAR_CLIENT_PUBLIC_URL,
+        identifier=identifier,
+        setup_instructions=[
+            "Install Traccar Client",
+            "Use the Traccar Client URL above. On a phone, replace localhost with your laptop Wi-Fi IP when testing locally.",
+            f"Set device identifier to {identifier}",
+            "Grant background location permission and disable battery optimization",
+        ],
+    )
 
 
 @router.get("/{device_id}/channels", response_model=list[DeviceChannelOut])

@@ -5,6 +5,8 @@ export type VehicleType = 'bike' | 'car' | 'truck' | 'bus' | 'other';
 export type LicenseStatus = 'valid' | 'expired' | 'pending' | 'suspended';
 
 export type Protocol = 'jt808' | 'sim' | 'other';
+export type DeviceSource = 'simulator' | 'traccar' | 'jt808';
+export type ConnectionStatus = 'waiting' | 'connected' | 'stale' | 'authentication_error' | 'unknown_device' | 'traccar_unavailable';
 
 export interface Vehicle {
   id: number;
@@ -24,6 +26,11 @@ export interface Device {
   sim_number: string;
   protocol: Protocol;
   last_seen_at: string | null;
+  source: DeviceSource;
+  external_device_id: number | null;
+  external_device_identifier: string | null;
+  connection_status: ConnectionStatus;
+  last_external_sync_at: string | null;
 }
 
 export interface DeviceChannel {
@@ -71,6 +78,8 @@ export interface FleetPosition extends VehicleLatest {
   sim_number?: string | null;
   license_status?: LicenseStatus | null;
   license_expiry?: string | null;
+  source?: DeviceSource | null;
+  connection_status?: ConnectionStatus | null;
 }
 
 export interface VideoClip {

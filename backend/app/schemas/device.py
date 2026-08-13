@@ -2,7 +2,33 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.device import Protocol
+from app.models.device import ConnectionStatus, DeviceSource, Protocol
+
+
+class DeviceCreate(BaseModel):
+    device_serial: str
+    sim_number: str = ""
+    protocol: Protocol = Protocol.other
+    source: DeviceSource = DeviceSource.traccar
+    external_device_id: int | None = None
+    external_device_identifier: str | None = None
+
+
+class DeviceUpdate(BaseModel):
+    vehicle_id: int | None = None
+    device_serial: str | None = None
+    sim_number: str | None = None
+    protocol: Protocol | None = None
+    source: DeviceSource | None = None
+    external_device_id: int | None = None
+    external_device_identifier: str | None = None
+
+
+class PairingOut(BaseModel):
+    device_id: int
+    server_url: str
+    identifier: str
+    setup_instructions: list[str]
 
 
 class DeviceChannelOut(BaseModel):
@@ -26,6 +52,11 @@ class DeviceOut(BaseModel):
     sim_number: str
     protocol: Protocol
     last_seen_at: datetime | None = None
+    source: DeviceSource
+    external_device_id: int | None = None
+    external_device_identifier: str | None = None
+    connection_status: ConnectionStatus
+    last_external_sync_at: datetime | None = None
     channels: list[DeviceChannelOut] = []
 
 

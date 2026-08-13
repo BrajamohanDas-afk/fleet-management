@@ -107,6 +107,8 @@ async def ingest_telemetry(
                     "status": status.value,
                     "recorded_at": recorded_at.isoformat(),
                     "received_at": received_at.isoformat(),
+                    "source": device.source.value,
+                    "connection_status": device.connection_status.value,
                 }
             )
         },

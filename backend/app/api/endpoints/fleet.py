@@ -3,9 +3,15 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from redis.asyncio import Redis
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_redis
+from app.core.database import get_db
+from app.models.device import Device
 from app.models.vehicle import VehicleType
+from app.models.vehicle import Vehicle
+from app.models.vehicle_latest import VehicleLatest
 from app.schemas.fleet import FleetPositionOut
 from app.services.status_service import VehicleStatus
 
@@ -35,6 +41,7 @@ def _inside_bbox(lat: float, lon: float, bbox: tuple[float, float, float, float]
 
 @router.get("/positions", response_model=list[FleetPositionOut])
 async def get_positions(
+    db: AsyncSession = Depends(get_db),
     redis: Redis = Depends(get_redis),
     current_user: dict = Depends(get_current_user),
     status: str | None = Query(None, description="Filter by vehicle status"),
@@ -104,6 +111,51 @@ async def get_positions(
                 ignition_on=data.get("ignition_on"),
                 status=vehicle_status,
                 recorded_at=recorded_at,
+                received_at=(datetime.fromisoformat(data["received_at"]) if data.get("received_at") else None),
+                source=data.get("source"),
+                connection_status=data.get("connection_status"),
+            )
+        )
+
+    if positions or raw_items:
+        return positions
+
+    result = await db.execute(
+        select(VehicleLatest, Vehicle, Device)
+        .join(Vehicle, Vehicle.id == VehicleLatest.vehicle_id)
+        .outerjoin(Device, Device.id == VehicleLatest.device_id)
+    )
+    for latest, vehicle, device in result.all():
+        if latest.latitude is None or latest.longitude is None:
+            continue
+
+        if status and latest.status.value != status:
+            continue
+
+        if q:
+            query = q.lower()
+            if query not in vehicle.registration_no.lower() and query not in vehicle.vehicle_code.lower():
+                continue
+
+        if bbox_tuple and not _inside_bbox(float(latest.latitude), float(latest.longitude), bbox_tuple):
+            continue
+
+        positions.append(
+            FleetPositionOut(
+                vehicle_id=vehicle.id,
+                registration_no=vehicle.registration_no,
+                vehicle_code=vehicle.vehicle_code,
+                vehicle_type=vehicle.vehicle_type,
+                latitude=latest.latitude,
+                longitude=latest.longitude,
+                speed_kmh=latest.speed_kmh,
+                heading_deg=latest.heading_deg,
+                ignition_on=latest.ignition_on,
+                status=latest.status,
+                recorded_at=latest.recorded_at,
+                received_at=latest.received_at,
+                source=device.source.value if device else None,
+                connection_status=device.connection_status.value if device else None,
             )
         )
 

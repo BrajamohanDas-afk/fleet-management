@@ -64,7 +64,7 @@ async def test_channels_endpoint(client, auth_headers, device_with_channels):
 
     for ch in data:
         assert ch["stream_url"].endswith(f"/{ch['stream_path']}/whep")
-        assert "mediamtx" in ch["stream_url"]
+        assert ch["stream_url"].startswith("http://localhost:8890/")
 
 
 async def test_health_endpoint_degraded_fallback(

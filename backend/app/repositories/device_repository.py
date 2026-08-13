@@ -45,6 +45,18 @@ async def get_by_serial(db: AsyncSession, device_serial: str) -> Device | None:
     return result.scalar_one_or_none()
 
 
+async def get_by_external_identifier(db: AsyncSession, identifier: str) -> Device | None:
+    result = await db.execute(
+        select(Device).where(Device.external_device_identifier == identifier)
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_by_external_id(db: AsyncSession, external_id: int) -> Device | None:
+    result = await db.execute(select(Device).where(Device.external_device_id == external_id))
+    return result.scalar_one_or_none()
+
+
 async def get_by_vehicle(db: AsyncSession, vehicle_id: int) -> list[Device]:
     result = await db.execute(
         select(Device).where(Device.vehicle_id == vehicle_id)

@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Bike, Bus, Car, HelpCircle, Truck, Trash2 } from 'lucide-react';
+import { Bike, Bus, Car, HelpCircle, Link, Smartphone, Truck, Trash2 } from 'lucide-react';
 import type { VehicleOut } from '../../services/vehicles';
 import type { VehicleStatus, LicenseStatus, VehicleType } from '../../types';
 
@@ -36,9 +36,11 @@ interface VehicleCardProps {
   vehicle: VehicleOut;
   onEdit: (vehicle: VehicleOut) => void;
   onDelete: (id: number) => void;
+  onConnect: (vehicle: VehicleOut) => void;
+  onShare: (vehicle: VehicleOut) => void;
 }
 
-export default function VehicleCard({ vehicle, onEdit, onDelete }: VehicleCardProps) {
+export default function VehicleCard({ vehicle, onEdit, onDelete, onConnect, onShare }: VehicleCardProps) {
   const navigate = useNavigate();
   const TypeIcon = VEHICLE_TYPE_ICONS[vehicle.vehicle_type];
   const status = vehicle.latest?.status ?? 'offline';
@@ -104,7 +106,12 @@ export default function VehicleCard({ vehicle, onEdit, onDelete }: VehicleCardPr
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
+        <span className="rounded-full bg-slate-100 px-2 py-1">
+          Tracker status: {vehicle.latest?.device_id ? 'Registered' : 'Not connected'}
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={handleOverview}
@@ -128,11 +135,27 @@ export default function VehicleCard({ vehicle, onEdit, onDelete }: VehicleCardPr
               onDelete(vehicle.id);
             }
           }}
-          className="flex-1 flex items-center justify-center gap-1 rounded-lg px-3 py-2 text-sm font-medium hover:opacity-80"
+          className="flex flex-1 items-center justify-center gap-1 rounded-lg px-3 py-2 text-sm font-medium hover:opacity-80"
           style={{ backgroundColor: 'var(--danger-50)', color: 'var(--danger-text)' }}
         >
           <Trash2 className="h-4 w-4" />
           Delete
+        </button>
+        <button
+          type="button"
+          onClick={() => onConnect(vehicle)}
+          className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg border border-primary-200 px-3 py-2 text-sm font-medium text-primary-700 hover:bg-primary-50"
+        >
+          <Smartphone className="h-4 w-4" />
+          Tracker
+        </button>
+        <button
+          type="button"
+          onClick={() => onShare(vehicle)}
+          className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          <Link className="h-4 w-4" />
+          Share
         </button>
       </div>
     </div>

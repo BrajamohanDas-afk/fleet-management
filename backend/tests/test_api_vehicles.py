@@ -1,6 +1,10 @@
+from datetime import datetime, timezone
+
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.device import Device, DeviceSource, Protocol
+from app.models.share_link import ShareLink
 from app.models.vehicle import LicenseStatus, Vehicle, VehicleType
 from app.models.vehicle_latest import VehicleLatest
 from app.services.status_service import VehicleStatus
@@ -111,6 +115,42 @@ async def test_delete_vehicle(client, auth_headers, sample_vehicles, db: AsyncSe
 
     deleted = await db.get(Vehicle, v.id)
     assert deleted is None
+
+
+async def test_delete_vehicle_with_tracker_dependencies(
+    client, auth_headers, sample_vehicles, db: AsyncSession, fake_redis
+):
+    v = sample_vehicles[0]
+    device = Device(
+        vehicle_id=v.id,
+        device_serial="tracker-delete-test",
+        sim_number="n/a",
+        protocol=Protocol.other,
+        source=DeviceSource.traccar,
+        external_device_identifier="delete-test-phone",
+    )
+    db.add(device)
+    await db.flush()
+
+    latest = await db.get(VehicleLatest, v.id)
+    latest.device_id = device.id
+    db.add(
+        ShareLink(
+            token_hash="delete-test-token",
+            vehicle_id=v.id,
+            created_by="admin",
+            expires_at=datetime.now(timezone.utc),
+        )
+    )
+    await fake_redis.hset("fleet:latest", str(v.id), "{}")
+    await db.flush()
+
+    response = await client.delete(f"/api/vehicles/{v.id}", headers=auth_headers)
+    assert response.status_code == 204
+
+    assert await db.get(Vehicle, v.id) is None
+    assert await db.get(Device, device.id) is None
+    assert await fake_redis.hget("fleet:latest", str(v.id)) is None
 
 
 async def test_search_vehicles(client, auth_headers, sample_vehicles):

@@ -103,6 +103,7 @@ export default function VehicleCardRail({
             </div>
 
             <div className="mb-3 grid grid-cols-2 gap-y-2 text-sm">
+              <div className="col-span-2"><p className="text-xs text-slate-500">Tracker</p><p className="font-medium text-slate-900">{position.source === 'traccar' ? `Phone · ${position.connection_status ?? 'waiting'}` : position.source ?? 'simulator'}</p></div>
               <div>
                 <p className="text-xs text-slate-500">Speed</p>
                 <p className="font-medium text-slate-900">{speedText}</p>

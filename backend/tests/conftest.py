@@ -18,6 +18,7 @@ from app.models import (  # noqa: F401
     vehicle,
     vehicle_latest,
     video_clip,
+    share_link,
 )
 
 def _default_test_database_url() -> str:
@@ -156,7 +157,7 @@ async def clean_db(db: AsyncSession) -> AsyncSession:
         text(
             "TRUNCATE TABLE "
             "device_sessions, video_clips, telemetry_points, device_channels, "
-            "devices, vehicle_latest, vehicles "
+            "devices, vehicle_latest, vehicles, share_links "
             "RESTART IDENTITY CASCADE"
         )
     )

@@ -19,6 +19,14 @@ class Settings(BaseSettings):
     # MediaMTX control API port (v3/paths/list etc.).
     MEDIAMTX_API_PORT: int = 8889
     DEV_DEVICE_KEY: str = "dev-device-key"
+    TRACCAR_URL: str = "http://traccar:8082"
+    TRACCAR_PUBLIC_URL: str = "http://localhost:8082"
+    TRACCAR_CLIENT_PUBLIC_URL: str = "http://localhost:5055"
+    TRACCAR_USERNAME: str = "admin"
+    TRACCAR_PASSWORD: str = "admin"
+    TRACCAR_SYNC_INTERVAL_SECONDS: int = 10
+    TRACCAR_STALE_SECONDS: int = 90
+    PUBLIC_SHARE_BASE_URL: str = "http://localhost:5173"
 
 
 settings = Settings()

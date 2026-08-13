@@ -3,6 +3,9 @@ from apscheduler.triggers.cron import CronTrigger
 
 from app.core.database import AsyncSessionLocal
 from app.services.cleanup_service import cleanup_clips, cleanup_telemetry
+from app.services.traccar_service import TraccarAuthError, TraccarError, mark_stale_traccar_devices, sync_traccar_once
+from app.core.redis import get_redis_client
+from app.core.config import settings
 
 _scheduler: AsyncIOScheduler | None = None
 
@@ -19,6 +22,16 @@ async def _run_cleanup_clips() -> None:
         await db.commit()
 
 
+async def _run_traccar_sync() -> None:
+    async with AsyncSessionLocal() as db:
+        try:
+            await sync_traccar_once(db, get_redis_client())
+        except (TraccarAuthError, TraccarError):
+            # The device connection_status records preserve the reason for the UI.
+            pass
+        await mark_stale_traccar_devices(db)
+
+
 def start_scheduler() -> AsyncIOScheduler:
     """Create and start the APScheduler with daily 03:00 cleanup jobs."""
     global _scheduler
@@ -28,6 +41,15 @@ def start_scheduler() -> AsyncIOScheduler:
         trigger=CronTrigger(hour=3, minute=0),
         id="cleanup_telemetry",
         replace_existing=True,
+    )
+    _scheduler.add_job(
+        _run_traccar_sync,
+        trigger="interval",
+        seconds=settings.TRACCAR_SYNC_INTERVAL_SECONDS,
+        id="traccar_sync",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
     )
     _scheduler.add_job(
         _run_cleanup_clips,

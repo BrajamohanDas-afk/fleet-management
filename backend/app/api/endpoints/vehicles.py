@@ -12,6 +12,7 @@ from app.models.device import Device, Protocol
 from app.models.device_channel import DeviceChannel
 from app.models.vehicle_latest import VehicleLatest
 from app.repositories import device_repository, vehicle_repository
+from app.schemas.device import DeviceCreate, DeviceOut
 from app.schemas.vehicle import (
     CameraTestRequest,
     CameraTestResponse,
@@ -62,6 +63,26 @@ async def _ensure_serial_available(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Device serial already exists",
+        )
+
+
+async def _ensure_external_available(
+    db: AsyncSession,
+    payload: DeviceCreate,
+) -> None:
+    if payload.external_device_identifier and await device_repository.get_by_external_identifier(
+        db, payload.external_device_identifier
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="External device identifier is already bound",
+        )
+    if payload.external_device_id and await device_repository.get_by_external_id(
+        db, payload.external_device_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="External device id is already bound",
         )
 
 
@@ -254,6 +275,37 @@ async def _run_camera_test(rtsp_url: str) -> CameraTestResponse:
         return CameraTestResponse(status="error", detail="ffprobe not installed")
     except Exception:
         return CameraTestResponse(status="error", detail="Camera connection failed")
+
+
+@router.post("/{vehicle_id}/devices", response_model=DeviceOut, status_code=status.HTTP_201_CREATED)
+async def create_vehicle_device(
+    vehicle_id: int,
+    payload: DeviceCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+) -> DeviceOut:
+    _ = current_user
+    if await vehicle_repository.get(db, vehicle_id) is None:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    await _ensure_serial_available(db, payload.device_serial)
+    await _ensure_external_available(db, payload)
+    data = payload.model_dump()
+    data.update({"vehicle_id": vehicle_id, "protocol": payload.protocol, "source": payload.source})
+    device = await device_repository.create(db, data)
+    await db.commit()
+    return DeviceOut.model_validate(device)
+
+
+@router.get("/{vehicle_id}/devices", response_model=list[DeviceOut])
+async def list_vehicle_devices(
+    vehicle_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+) -> list[DeviceOut]:
+    _ = current_user
+    if await vehicle_repository.get(db, vehicle_id) is None:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    return [DeviceOut.model_validate(device) for device in await device_repository.get_by_vehicle(db, vehicle_id)]
 
 
 @router.get("", response_model=list[VehicleWithLatest])

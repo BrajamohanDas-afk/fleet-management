@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 from app.models.vehicle import VehicleType
+from app.models.device import ConnectionStatus, DeviceSource
 from app.services.status_service import VehicleStatus
 
 
@@ -21,3 +22,5 @@ class FleetPositionOut(BaseModel):
     status: VehicleStatus
     recorded_at: datetime | None = None
     received_at: datetime | None = None
+    source: DeviceSource | None = None
+    connection_status: ConnectionStatus | None = None
