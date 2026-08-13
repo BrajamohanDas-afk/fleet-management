@@ -17,9 +17,9 @@ function needsRenewal(vehicle: VehicleOut): boolean {
 
 function Counter({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl bg-white p-4 shadow-sm">
-      <p className="text-sm font-medium text-slate-500">{label}</p>
-      <p className="text-2xl font-bold text-slate-900">{value}</p>
+    <div className="rounded-xl p-4 shadow-sm" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-primary)' }}>
+      <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>{label}</p>
+      <p className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{value}</p>
     </div>
   );
 }
@@ -76,25 +76,24 @@ export default function Vehicles() {
   };
 
   const handleDelete = async (id: number) => {
-    if (window.confirm('Are you sure you want to delete this vehicle?')) {
-      await deleteVehicle.mutateAsync(id);
-    }
+    await deleteVehicle.mutateAsync(id);
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
+    <div className="min-h-screen p-6" style={{ backgroundColor: 'var(--bg-primary)' }}>
       <div className="mx-auto max-w-7xl space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Vehicles</h1>
-            <p className="text-sm text-slate-500">
+            <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Vehicles</h1>
+            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
               Manage your fleet registry
             </p>
           </div>
           <button
             type="button"
             onClick={handleAdd}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+            className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium hover:opacity-80"
+            style={{ backgroundColor: 'var(--accent-600)', color: 'var(--text-inverse)' }}
           >
             <Plus className="h-4 w-4" />
             Add Vehicle
@@ -118,19 +117,19 @@ export default function Vehicles() {
         />
 
         {isLoading && (
-          <div className="rounded-xl bg-white p-8 text-center text-slate-500 shadow-sm">
+          <div className="rounded-xl p-8 text-center shadow-sm" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
             Loading vehicles…
           </div>
         )}
 
         {error && (
-          <div className="rounded-xl bg-red-50 p-4 text-sm text-red-700">
+          <div className="rounded-xl p-4 text-sm" style={{ backgroundColor: 'var(--danger-50)', color: 'var(--danger-text)' }}>
             Failed to load vehicles: {error.message}
           </div>
         )}
 
         {!isLoading && !error && vehicles.length === 0 && (
-          <div className="rounded-xl bg-white p-8 text-center text-slate-500 shadow-sm">
+          <div className="rounded-xl p-8 text-center shadow-sm" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
             No vehicles match your filters.
           </div>
         )}
@@ -138,17 +137,7 @@ export default function Vehicles() {
         {!isLoading && !error && vehicles.length > 0 && (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {vehicles.map((vehicle) => (
-              <div key={vehicle.id} className="relative">
-                <VehicleCard vehicle={vehicle} onEdit={handleEdit} />
-                <button
-                  type="button"
-                  onClick={() => handleDelete(vehicle.id)}
-                  disabled={deleteVehicle.isPending}
-                  className="absolute right-2 top-2 text-xs text-slate-400 hover:text-red-600 disabled:opacity-60"
-                >
-                  Delete
-                </button>
-              </div>
+              <VehicleCard key={vehicle.id} vehicle={vehicle} onEdit={handleEdit} onDelete={handleDelete} />
             ))}
           </div>
         )}

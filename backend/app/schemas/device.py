@@ -14,6 +14,7 @@ class DeviceChannelOut(BaseModel):
     label: str
     stream_path: str | None = None
     stream_url: str | None = None
+    rtsp_url: str | None = None
 
 
 class DeviceOut(BaseModel):

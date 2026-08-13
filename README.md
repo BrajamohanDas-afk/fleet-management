@@ -10,6 +10,7 @@ The project runs a local fleet operations stack:
 - Redis for latest fleet state and fan-out.
 - MediaMTX for H.264/WebRTC video delivery.
 - Python simulator for GPS telemetry and development video streams.
+- Go protocol layer for scalable TCP telemetry intake and RTSP-to-MediaMTX relays.
 
 Production DVR integration is not implemented yet. The current device ingest path is simulator-only and uses `POST /api/dev/ingest/telemetry` guarded by `X-Device-Key`.
 
@@ -66,6 +67,7 @@ password: admin
 | MediaMTX API | `http://localhost:8889` | Media server control API |
 | MediaMTX WHEP | `http://localhost:8890` | Browser WebRTC playback |
 | MediaMTX RTSP | `localhost:8554` | Simulator stream publish |
+| Protocol TCP | `localhost:9000` | JSON telemetry intake for protocol devices |
 
 PostgreSQL is intentionally exposed on `15432` to avoid conflicts with any local Postgres already using `5432`.
 
@@ -155,6 +157,14 @@ python agent.py --disconnect-every 60
 ```
 
 These faults are used to exercise the video panel states: idle, connecting, live, degraded, reconnecting, and offline.
+
+## Adding a real camera
+
+**Vehicles → Add Vehicle → Add camera** lets you add one or more DVR channels with an angle (Front, Rear, Cabin, Left, Right, or Cargo) and an RTSP source. On save, the API stores the source, creates the device channels, and asks the protocol layer to relay each stream into MediaMTX. The dashboard reads the resulting WebRTC stream from MediaMTX.
+
+For the device serial, use the identifier sent as `device_id` by the protocol device. The protocol layer accepts newline-delimited JSON telemetry on TCP port `9000` and sends it through Redis to the normal Postgres/Redis fleet ingest pipeline.
+
+RTSP sources must be reachable from the server running this stack. A camera behind normal mobile-carrier NAT cannot be pulled with an RTSP URL; it must push video to the server through its supported device protocol or a VPN/gateway.
 
 ## Testing
 

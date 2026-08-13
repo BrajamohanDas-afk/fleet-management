@@ -5,6 +5,7 @@ import { LatLngBounds } from 'leaflet';
 import type { LatLngExpression } from 'leaflet';
 import { useAllVehicles } from '../hooks/useAllVehicles';
 import { useVideoChannels } from '../hooks/useVideoChannels';
+import { startStreams } from '../services/video';
 import VideoControls from '../components/video/VideoControls';
 import VideoPanel from '../components/video/VideoPanel';
 import SaveVideoModal from '../components/video/SaveVideoModal';
@@ -13,6 +14,8 @@ import { formatInIst } from '../utils/formatDate';
 import type { DeviceChannelOut, DeviceHealth, VehicleStatus } from '../types';
 
 type LayoutMode = 'side-by-side' | 'front-focus' | 'rear-focus';
+
+const STREAM_READY_WAIT_MS = 1_500;
 
 const LAYOUT_OPTIONS: { value: LayoutMode; label: string }[] = [
   { value: 'side-by-side', label: 'Side-by-side' },
@@ -33,6 +36,10 @@ type PanelConfig = Pick<
 > & {
   health: DeviceHealth | null;
 };
+
+function waitForStreamReady(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function deriveCameraState(healthItems: DeviceHealth[]): string {
   if (healthItems.length === 0) return 'No cameras';
@@ -62,6 +69,7 @@ export default function VideoTelematics() {
   const [selectedVehicleId, setSelectedVehicleId] = useState<number | null>(null);
   const [layout, setLayout] = useState<LayoutMode>('side-by-side');
   const [isStreaming, setIsStreaming] = useState(false);
+  const [streamError, setStreamError] = useState<string | null>(null);
   const [reconnectSignal, setReconnectSignal] = useState(0);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [isRecordingsModalOpen, setIsRecordingsModalOpen] = useState(false);
@@ -83,15 +91,16 @@ export default function VideoTelematics() {
     [vehicles, selectedVehicleId]
   );
 
-  const deviceId = selectedVehicle?.latest?.device_id ?? null;
+  const deviceId = selectedVehicle?.device_id ?? selectedVehicle?.latest?.device_id ?? null;
   const {
     channels,
     health,
     isLoading: channelsLoading,
+    refetch: refetchVideoChannels,
   } = useVideoChannels(deviceId);
 
   const panels: PanelConfig[] = useMemo(() => {
-    return channels.slice(0, 2).map((channel) => ({
+    return channels.slice(0, 4).map((channel) => ({
       ...channel,
       health:
         health.find((h) => h.channel_no === channel.channel_no) ?? null,
@@ -104,13 +113,60 @@ export default function VideoTelematics() {
     setSearchParams({ vehicleId: String(id) });
   };
 
-  const handleStartCameras = () => setIsStreaming(true);
+  const handleStartCameras = async () => {
+    setStreamError(null);
+
+    if (!selectedVehicle) {
+      setStreamError('Select a vehicle before starting cameras.');
+      return;
+    }
+
+    if (!deviceId) {
+      setStreamError('Selected vehicle has no assigned device. Add device serial/SIM and camera sources first.');
+      return;
+    }
+
+    let currentChannels = channels;
+    if (channelsLoading || currentChannels.length === 0) {
+      currentChannels = await refetchVideoChannels();
+    }
+
+    if (currentChannels.length === 0) {
+      setStreamError('No camera channels configured for this vehicle. Add a camera source in Edit Vehicle first.');
+      return;
+    }
+
+    if (!currentChannels.some((channel) => channel.stream_url)) {
+      setStreamError('Camera channels exist but no playback URLs are available. Check MediaMTX configuration.');
+      return;
+    }
+
+    try {
+      const result = await startStreams(deviceId);
+      const hasRtspSources = currentChannels.some((channel) => channel.rtsp_url);
+      if (hasRtspSources && result.started === 0) {
+        setStreamError('Camera channels exist, but no RTSP relays were started. Re-save the camera RTSP URLs and try again.');
+        return;
+      }
+      await waitForStreamReady(STREAM_READY_WAIT_MS);
+      await refetchVideoChannels();
+      setIsStreaming(true);
+      setReconnectSignal((prev) => prev + 1);
+    } catch {
+      setStreamError('Failed to request camera relays. Check the API, Redis, protocol-layer, and MediaMTX services.');
+    }
+  };
   const handleStopCameras = () => setIsStreaming(false);
   const handleReconnectView = () => setReconnectSignal((prev) => prev + 1);
   const handleSaveVideo = () => setIsSaveModalOpen(true);
   const handleSavedVideos = () => setIsRecordingsModalOpen(true);
 
   const cameraState = deriveCameraState(health);
+  const configuredCameraCount = channels.length;
+  const visibleCameraCount = panels.length;
+  const cameraSummary = configuredCameraCount > 0
+    ? `${cameraState} (${visibleCameraCount}/${configuredCameraCount} visible)`
+    : cameraState;
   const latest = selectedVehicle?.latest;
   const mapCenter: LatLngExpression =
     latest?.latitude && latest?.longitude
@@ -125,9 +181,9 @@ export default function VideoTelematics() {
   ) ?? panels[1];
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex flex-col gap-4 rounded-xl bg-white p-4 shadow-sm md:flex-row md:items-center md:justify-between">
+    <div className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl space-y-7">
+        <div className="flex flex-col gap-5 rounded-2xl bg-white p-5 shadow-sm md:flex-row md:items-start md:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">
               Video Telematics
@@ -142,7 +198,7 @@ export default function VideoTelematics() {
               value={selectedVehicleId ?? ''}
               onChange={handleVehicleChange}
               disabled={vehiclesLoading}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:opacity-60"
+              className="app-select"
             >
               <option value="" disabled>
                 Select vehicle
@@ -189,10 +245,29 @@ export default function VideoTelematics() {
           </div>
         )}
 
+        
+        {streamError && (
+          <div className="rounded-xl bg-red-50 p-4 text-sm text-red-700">
+            {streamError}
+          </div>
+        )}
+
+        {selectedVehicle && deviceId && configuredCameraCount > 0 && (
+          <div className="flex flex-col gap-3 rounded-xl bg-white p-4 text-sm text-slate-600 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-semibold text-slate-900">Camera stream status</p>
+              <p>{configuredCameraCount} configured camera{configuredCameraCount === 1 ? '' : 's'}; showing {visibleCameraCount > 4 ? 4 : visibleCameraCount} panel{visibleCameraCount === 1 ? '' : 's'}.</p>
+            </div>
+            <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+              {isStreaming ? 'Relays requested' : 'Idle'}
+            </div>
+          </div>
+        )}
+
         {selectedVehicle && (
           <div className="grid grid-cols-2 gap-4 rounded-xl bg-white p-4 shadow-sm md:grid-cols-4">
             <StatusItem label="Vehicle" value={selectedVehicle.registration_no} />
-            <StatusItem label="Cameras" value={cameraState} />
+            <StatusItem label="Cameras" value={cameraSummary} />
             <StatusItem
               label="GPS"
               value={latest?.status ? STATUS_LABELS[latest.status] : '--'}
@@ -225,36 +300,24 @@ export default function VideoTelematics() {
         {panels.length > 0 && (
           <div
             className={[
-              'grid gap-4',
-              layout === 'side-by-side' ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1',
+              'grid gap-5',
+              layout === 'side-by-side' && panels.length > 1 ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1',
             ].join(' ')}
           >
             {layout === 'side-by-side' && (
               <>
-                {frontPanel && (
+                {panels.map((panel) => (
                   <VideoPanel
-                    key={frontPanel.channel_no}
-                    streamUrl={frontPanel.stream_url}
-                    channelNo={frontPanel.channel_no}
-                    label={frontPanel.label}
+                    key={panel.channel_no}
+                    streamUrl={panel.stream_url}
+                    channelNo={panel.channel_no}
+                    label={panel.label}
                     layout={layout}
-                    health={frontPanel.health}
+                    health={panel.health}
                     autoStart={isStreaming}
                     reconnectSignal={reconnectSignal}
                   />
-                )}
-                {rearPanel && (
-                  <VideoPanel
-                    key={rearPanel.channel_no}
-                    streamUrl={rearPanel.stream_url}
-                    channelNo={rearPanel.channel_no}
-                    label={rearPanel.label}
-                    layout={layout}
-                    health={rearPanel.health}
-                    autoStart={isStreaming}
-                    reconnectSignal={reconnectSignal}
-                  />
-                )}
+                ))}
               </>
             )}
 
@@ -322,7 +385,7 @@ export default function VideoTelematics() {
 
         {selectedVehicle && deviceId && panels.length === 0 && !channelsLoading && (
           <div className="rounded-xl bg-white p-8 text-center text-slate-500 shadow-sm">
-            No camera channels configured for this device.
+            No camera channels configured for this device. Open Vehicles ? Edit and add a camera source first.
           </div>
         )}
 

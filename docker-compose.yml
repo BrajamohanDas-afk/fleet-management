@@ -31,7 +31,8 @@ services:
       - "8889:8889"
       - "8890:8890"
       - "8554:8554"
-      - "8189:8189"
+      - "8189:8189/tcp"
+      - "8189:8189/udp"
       - "1935:1935"
     volumes:
       - ./mediamtx.yml:/mediamtx.yml
@@ -53,6 +54,7 @@ services:
       SECRET_KEY: dev-secret-change-me
       ENV: dev
       MEDIAMTX_HOST: mediamtx
+      MEDIAMTX_PUBLIC_HOST: localhost
       MEDIAMTX_RTSP_PORT: "8554"
       MEDIAMTX_HTTP_PORT: "8890"
       MEDIAMTX_API_PORT: "8889"
@@ -107,6 +109,29 @@ services:
     # devices:
     #   - /dev/video0:/dev/video0
 
+  protocol-layer:
+    build:
+      context: ./Protocol_Layer
+      dockerfile: Dockerfile
+    container_name: fleet-protocol-layer
+    environment:
+      REDIS_ADDR: redis:6379
+      MEDIAMTX_RTSP_URL: rtsp://mediamtx:8554
+      PORT: "9000"
+    ports:
+      - "9000:9000"
+    depends_on:
+      redis:
+        condition: service_started
+      mediamtx:
+        condition: service_started
+    networks:
+      - fleet-net
+
 networks:
   fleet-net:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 10.240.20.0/24
+          gateway: 10.240.20.1

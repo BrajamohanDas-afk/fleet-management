@@ -15,7 +15,7 @@ import type { DeviceHealth } from '../../types';
 type LayoutMode = 'side-by-side' | 'front-focus' | 'rear-focus';
 
 interface VideoPanelProps {
-  streamUrl: string;
+  streamUrl: string | null;
   channelNo: number;
   label: string;
   layout: LayoutMode;
@@ -32,7 +32,24 @@ function formatAge(lastFrameAt: Date | null): string {
   const seconds = Math.floor((Date.now() - lastFrameAt.getTime()) / 1000);
   return `${seconds}s ago`;
 }
+function waitForIceGatheringComplete(peer: RTCPeerConnection): Promise<void> {
+  if (peer.iceGatheringState === 'complete') return Promise.resolve();
 
+  return new Promise((resolve) => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const done = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      peer.removeEventListener('icegatheringstatechange', handleChange);
+      resolve();
+    };
+    const handleChange = () => {
+      if (peer.iceGatheringState === 'complete') done();
+    };
+
+    peer.addEventListener('icegatheringstatechange', handleChange);
+    timeoutId = setTimeout(done, 3000);
+  });
+}
 export default function VideoPanel({
   streamUrl,
   channelNo,
@@ -98,6 +115,63 @@ export default function VideoPanel({
   }, [state, connectionKey, onStreamError]);
 
   useEffect(() => {
+    if (connectionKey === 0 || !videoRef.current || !streamUrl) return;
+
+    const peer = new RTCPeerConnection();
+    let sessionUrl: string | null = null;
+    let cancelled = false;
+
+    peer.addTransceiver('video', { direction: 'recvonly' });
+    peer.ontrack = (event) => {
+      if (videoRef.current && event.streams[0]) {
+        videoRef.current.srcObject = event.streams[0];
+        void videoRef.current.play();
+        onStreamReady();
+      }
+    };
+    peer.onconnectionstatechange = () => {
+      if (peer.connectionState === 'failed' || peer.connectionState === 'disconnected') {
+        onStreamError();
+      }
+    };
+    peer.oniceconnectionstatechange = () => {
+      if (peer.iceConnectionState === 'failed' || peer.iceConnectionState === 'disconnected') {
+        onStreamError();
+      }
+    };
+
+    const connect = async () => {
+      try {
+        const offer = await peer.createOffer();
+        await peer.setLocalDescription(offer);
+        await waitForIceGatheringComplete(peer);
+        const localDescription = peer.localDescription;
+        if (!localDescription?.sdp) throw new Error('WebRTC offer was not created');
+        const response = await fetch(streamUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/sdp', Accept: 'application/sdp' },
+          body: localDescription.sdp,
+        });
+        if (!response.ok) throw new Error(`WHEP request failed (${response.status})`);
+        const location = response.headers.get('location');
+        sessionUrl = location ? new URL(location, streamUrl).href : null;
+        const answer = await response.text();
+        if (!cancelled) await peer.setRemoteDescription({ type: 'answer', sdp: answer });
+      } catch {
+        if (!cancelled) onStreamError();
+      }
+    };
+    void connect();
+
+    return () => {
+      cancelled = true;
+      if (sessionUrl) void fetch(sessionUrl, { method: 'DELETE' }).catch(() => undefined);
+      peer.close();
+      if (videoRef.current) videoRef.current.srcObject = null;
+    };
+  }, [connectionKey, streamUrl, onStreamError, onStreamReady]);
+
+  useEffect(() => {
     return () => {
       if (videoRef.current) {
         videoRef.current.pause();
@@ -119,10 +193,10 @@ export default function VideoPanel({
   };
 
   const containerHeight = isFocused
-    ? 'h-[28rem]'
+    ? 'h-[34rem]'
     : layout === 'side-by-side'
-      ? 'h-80'
-      : 'h-72';
+      ? 'h-[30rem]'
+      : 'h-[28rem]';
 
   if (!isRegistered) {
     return (
@@ -134,9 +208,9 @@ export default function VideoPanel({
       >
         <div className="text-center">
           <AlertTriangle className="mx-auto mb-3 h-10 w-10 text-amber-500" />
-          <p className="text-sm font-medium text-white">Video limit reached</p>
+          <p className="text-sm font-medium text-white">Camera panel limit reached</p>
           <p className="mt-1 text-xs text-slate-400">
-            Stop another stream to start {label}.
+            Up to four camera panels can be active. Stop another panel, then retry {label}.
           </p>
         </div>
       </div>
@@ -144,6 +218,7 @@ export default function VideoPanel({
   }
 
   const showVideo = state === 'live' || state === 'degraded';
+  const shouldMountVideo = state === 'connecting' || showVideo;
 
   return (
     <div
@@ -178,11 +253,12 @@ export default function VideoPanel({
       {state === 'idle' && (
         <div className="flex h-full flex-col items-center justify-center">
           <CameraOff className="mb-3 h-12 w-12 text-slate-500" />
-          <p className="mb-4 text-sm text-slate-400">Stream stopped</p>
+          <p className="mb-4 text-sm text-slate-400">{streamUrl ? 'Stream stopped' : 'Playback URL unavailable'}</p>
           <button
             type="button"
             onClick={start}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+            disabled={!streamUrl}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-60"
           >
             <Play className="h-4 w-4" />
             Start Stream
@@ -190,32 +266,25 @@ export default function VideoPanel({
         </div>
       )}
 
-      {state === 'connecting' && (
-        <div className="flex h-full flex-col items-center justify-center">
-          <Loader2 className="mb-3 h-10 w-10 animate-spin text-primary-400" />
-          <p className="text-sm font-medium text-white">Connecting…</p>
-        </div>
-      )}
-
-      {showVideo && (
+      {shouldMountVideo && (
         <div className="relative h-full w-full">
-          {/*
-            TODO: Replace with a proper WHEP/WebRTC player for production.
-            For v1 we use a plain <video> element which works when the backend
-            exposes an HLS or direct media URL. MediaMTX WHEP URLs require an
-            RTCPeerConnection handshake.
-          */}
           <video
             key={connectionKey}
             ref={videoRef}
-            src={streamUrl}
             autoPlay
             muted
             playsInline
-            className="h-full w-full object-cover"
-            onLoadedData={onStreamReady}
-            onError={onStreamError}
+            className={[
+              'h-full w-full object-cover transition-opacity duration-200',
+              showVideo ? 'opacity-100' : 'opacity-0',
+            ].join(' ')}
           />
+          {state === 'connecting' && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900">
+              <Loader2 className="mb-3 h-10 w-10 animate-spin text-primary-400" />
+              <p className="text-sm font-medium text-white">Connecting...</p>
+            </div>
+          )}
           {state === 'degraded' && (
             <div className="absolute bottom-3 left-3 z-10 rounded-lg bg-amber-500/90 px-3 py-1.5 text-xs font-semibold text-white">
               Last frame {formatAge(lastFrameAt)}

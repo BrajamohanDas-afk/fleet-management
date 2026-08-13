@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 from redis.asyncio import Redis
@@ -7,7 +8,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models.device import Device
 from app.models.device_channel import DeviceChannel
 from app.schemas.device import DeviceChannelHealthOut, DeviceChannelOut
 
@@ -18,7 +18,7 @@ OFFLINE_FRAME_SECONDS = 10
 def build_stream_url(stream_path: str | None) -> str | None:
     if not stream_path:
         return None
-    host = settings.MEDIAMTX_HOST
+    host = settings.MEDIAMTX_PUBLIC_HOST
     port = settings.MEDIAMTX_HTTP_PORT
     return f"http://{host}:{port}/{stream_path}/whep"
 
@@ -48,6 +48,7 @@ async def get_device_channels(
             label=ch.label,
             stream_path=ch.stream_path,
             stream_url=build_stream_url(ch.stream_path),
+            rtsp_url=ch.rtsp_url,
         )
         for ch in channels
     ]
@@ -84,12 +85,14 @@ def _derive_channel_state(
 
 
 async def _query_mediamtx_path_info(stream_path: str) -> dict[str, Any] | None:
-    # Query the MediaMTX control API, which may be on a different port than WHEP.
+    # Query the MediaMTX control API. Vehicle stream paths contain slashes, so
+    # fall back to /paths/list when direct lookup cannot resolve the encoded path.
     api_port = getattr(settings, "MEDIAMTX_API_PORT", settings.MEDIAMTX_HTTP_PORT)
     base = f"http://{settings.MEDIAMTX_HOST}:{api_port}"
+    encoded_path = quote(stream_path, safe="")
     endpoints = [
-        f"{base}/v3/paths/get/{stream_path}",
-        f"{base}/v3/config/paths/get/{stream_path}",
+        f"{base}/v3/paths/get/{encoded_path}",
+        f"{base}/v3/config/paths/get/{encoded_path}",
     ]
     async with httpx.AsyncClient(timeout=5.0) as client:
         for url in endpoints:
@@ -99,6 +102,15 @@ async def _query_mediamtx_path_info(stream_path: str) -> dict[str, Any] | None:
                     return response.json()
             except httpx.HTTPError:
                 continue
+
+        try:
+            response = await client.get(f"{base}/v3/paths/list")
+            if response.status_code == 200:
+                for item in response.json().get("items", []):
+                    if item.get("name") == stream_path:
+                        return item
+        except httpx.HTTPError:
+            pass
     return None
 
 
@@ -139,9 +151,13 @@ async def get_channel_health(
                 data = path_info.get("item", path_info)
                 last_frame_at = _parse_mediamtx_last_frame(data)
                 if last_frame_at is None:
-                    # If the path exists but has no frames yet, treat as idle.
+                    # MediaMTX often exposes byte counters instead of per-frame
+                    # timestamps. A ready path receiving bytes is playable.
                     bytes_received = data.get("bytesReceived") or data.get("bytes_received") or 0
-                    state = "idle" if bytes_received == 0 else "degraded"
+                    if bytes_received > 0 and (data.get("ready") or data.get("available") or data.get("online")):
+                        state = "live"
+                    else:
+                        state = "idle" if bytes_received == 0 else "degraded"
                 else:
                     state = _derive_channel_state(last_frame_at, now)
             else:

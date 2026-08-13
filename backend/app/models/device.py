@@ -1,8 +1,13 @@
 import enum
+from typing import TYPE_CHECKING
 from datetime import datetime
 
-from sqlalchemy import String, DateTime, ForeignKey, func, Enum as SQLEnum
-from sqlalchemy.orm import Mapped, mapped_column
+if TYPE_CHECKING:
+    from app.models.vehicle import Vehicle
+    from app.models.device_channel import DeviceChannel
+
+from sqlalchemy import String, DateTime, ForeignKey, Enum as SQLEnum
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
@@ -18,7 +23,7 @@ class Device(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     vehicle_id: Mapped[int | None] = mapped_column(
-        ForeignKey("vehicles.id"),
+        ForeignKey("vehicles.id", ondelete="CASCADE"),
         nullable=True,
     )
     device_serial: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
@@ -30,4 +35,11 @@ class Device(Base):
     last_seen_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
+    )
+
+    vehicle: Mapped["Vehicle | None"] = relationship("Vehicle", back_populates="devices")
+    channels: Mapped[list["DeviceChannel"]] = relationship(
+        "DeviceChannel",
+        back_populates="device",
+        cascade="all, delete-orphan",
     )

@@ -1,9 +1,11 @@
-import { createContext, useCallback, useContext, useState } from 'react';
+import { createContext, useCallback, useContext, useRef, useState } from 'react';
 
 const MAX_SIMULTANEOUS_PANELS = 4;
 
 interface VideoPanelContextValue {
   activePanelIds: ReadonlySet<string>;
+  activePanelCount: number;
+  maxPanels: number;
   registerPanel: (id: string) => boolean;
   unregisterPanel: (id: string) => void;
 }
@@ -11,33 +13,43 @@ interface VideoPanelContextValue {
 const VideoPanelContext = createContext<VideoPanelContextValue | null>(null);
 
 export function VideoPanelProvider({ children }: { children: React.ReactNode }) {
+  const activePanelIdsRef = useRef<Set<string>>(new Set());
   const [activePanelIds, setActivePanelIds] = useState<Set<string>>(new Set());
 
-  const registerPanel = useCallback((id: string): boolean => {
-    let accepted = false;
-    setActivePanelIds((prev) => {
-      if (prev.has(id) || prev.size >= MAX_SIMULTANEOUS_PANELS) {
-        accepted = prev.has(id);
-        return prev;
-      }
-      accepted = true;
-      return new Set([...prev, id]);
-    });
-    return accepted;
+  const syncActivePanels = useCallback((next: Set<string>) => {
+    activePanelIdsRef.current = next;
+    setActivePanelIds(next);
   }, []);
 
+  const registerPanel = useCallback((id: string): boolean => {
+    const current = activePanelIdsRef.current;
+    if (current.has(id)) return true;
+    if (current.size >= MAX_SIMULTANEOUS_PANELS) return false;
+
+    const next = new Set(current);
+    next.add(id);
+    syncActivePanels(next);
+    return true;
+  }, [syncActivePanels]);
+
   const unregisterPanel = useCallback((id: string) => {
-    setActivePanelIds((prev) => {
-      if (!prev.has(id)) return prev;
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  }, []);
+    const current = activePanelIdsRef.current;
+    if (!current.has(id)) return;
+
+    const next = new Set(current);
+    next.delete(id);
+    syncActivePanels(next);
+  }, [syncActivePanels]);
 
   return (
     <VideoPanelContext.Provider
-      value={{ activePanelIds, registerPanel, unregisterPanel }}
+      value={{
+        activePanelIds,
+        activePanelCount: activePanelIds.size,
+        maxPanels: MAX_SIMULTANEOUS_PANELS,
+        registerPanel,
+        unregisterPanel,
+      }}
     >
       {children}
     </VideoPanelContext.Provider>

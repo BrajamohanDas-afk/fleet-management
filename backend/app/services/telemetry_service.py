@@ -27,6 +27,14 @@ async def ingest_telemetry(
     Duplicate or late packets (recorded_at not newer than the latest stored
     point for this device) are ignored and return None.
     """
+    device = await device_repository.get(db, device_id)
+    if device is None or device.vehicle_id is None:
+        return None
+
+    vehicle = await db.get(Vehicle, device.vehicle_id)
+    if vehicle is None:
+        return None
+
     latest = await telemetry_repository.get_latest_for_device(db, device_id)
     if latest is not None and recorded_at <= latest.recorded_at:
         return None
@@ -47,14 +55,6 @@ async def ingest_telemetry(
 
     fix_age_seconds = (received_at - recorded_at).total_seconds()
     status = derive_status(fix_age_seconds, speed_kmh)
-
-    device = await device_repository.get(db, device_id)
-    if device is None:
-        return None
-
-    vehicle = await db.get(Vehicle, device.vehicle_id)
-    if vehicle is None:
-        return None
 
     device.last_seen_at = received_at
 

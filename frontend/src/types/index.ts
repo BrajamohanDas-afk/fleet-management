@@ -32,6 +32,8 @@ export interface DeviceChannel {
   channel_no: number;
   label: string;
   stream_path: string | null;
+  stream_url?: string | null;
+  rtsp_url?: string | null;
 }
 
 export interface TelemetryPoint {
@@ -90,9 +92,13 @@ export type ChannelState =
   | 'offline';
 
 export interface DeviceChannelOut {
+  id: number;
+  device_id: number;
   channel_no: number;
   label: string;
-  stream_url: string;
+  stream_path: string | null;
+  stream_url: string | null;
+  rtsp_url?: string | null;
 }
 
 export interface DeviceHealth {
