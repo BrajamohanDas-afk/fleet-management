@@ -431,7 +431,7 @@ export default function VehicleForm({
                         </button>
                         {vehicle && (
                           <a
-                            href={`/dashboard/video?vehicleId=${vehicle.id}`}
+                            href={`/dashboard/video?vehicleId=${vehicle.id}&channelNo=${camera.channel_no}&autostart=1`}
                             onClick={onClose}
                             className="inline-flex h-8 items-center gap-1 rounded-md border px-3 text-xs font-medium hover:opacity-80"
                             style={{ backgroundColor: 'var(--bg-tertiary)', borderColor: 'var(--border-secondary)', color: 'var(--text-primary)' }}

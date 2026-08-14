@@ -45,8 +45,15 @@ export default function VehicleCard({ vehicle, onEdit, onDelete, onConnect, onSh
   const TypeIcon = VEHICLE_TYPE_ICONS[vehicle.vehicle_type];
   const status = vehicle.latest?.status ?? 'offline';
 
-  const deviceCode = vehicle.latest?.device_serial ?? '--';
-  const simNumber = vehicle.latest?.sim_number ?? '--';
+  const deviceCode =
+    vehicle.device_serial?.trim() ||
+    vehicle.latest?.device_serial?.trim() ||
+    '--';
+  const simNumber =
+    vehicle.sim_number?.trim() ||
+    vehicle.latest?.sim_number?.trim() ||
+    '--';
+  const hasDevice = Boolean(vehicle.device_id ?? vehicle.latest?.device_id);
 
   const handleOverview = () => {
     navigate(`/dashboard/video?vehicleId=${vehicle.id}`);
@@ -108,7 +115,7 @@ export default function VehicleCard({ vehicle, onEdit, onDelete, onConnect, onSh
 
       <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
         <span className="rounded-full bg-slate-100 px-2 py-1">
-          Tracker status: {vehicle.latest?.device_id ? 'Registered' : 'Not connected'}
+          Tracker status: {hasDevice ? 'Registered' : 'Not connected'}
         </span>
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -161,3 +168,4 @@ export default function VehicleCard({ vehicle, onEdit, onDelete, onConnect, onSh
     </div>
   );
 }
+

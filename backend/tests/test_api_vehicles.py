@@ -185,3 +185,101 @@ async def test_type_filter(client, auth_headers, sample_vehicles):
     data = response.json()
     assert len(data) == 1
     assert data[0]["vehicle_type"] == "truck"
+
+
+async def test_create_vehicle_with_device_returns_enriched_device_info(client, auth_headers):
+    payload = {
+        "registration_no": "NEWCAM001",
+        "vehicle_code": "VCAM001",
+        "vehicle_type": "car",
+        "speed_limit_kmh": 80.0,
+        "license_status": "valid",
+        "device": {
+            "device_serial": "newcam-device-001",
+            "sim_number": "9000001001",
+            "protocol": "other",
+            "cameras": [
+                {
+                    "channel_no": 1,
+                    "label": "Front",
+                    "rtsp_url": "rtsp://127.0.0.1:554/front",
+                }
+            ],
+        },
+    }
+
+    response = await client.post("/api/vehicles", json=payload, headers=auth_headers)
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["device_id"] is not None
+    assert data["device_serial"] == "newcam-device-001"
+    assert data["sim_number"] == "9000001001"
+    assert data["latest"]["device_id"] == data["device_id"]
+
+
+async def test_update_vehicle_with_device_returns_enriched_device_info(
+    client, auth_headers, sample_vehicles
+):
+    vehicle = sample_vehicles[0]
+    payload = {
+        "device": {
+            "device_serial": "updated-device-001",
+            "sim_number": "9000001002",
+            "protocol": "other",
+            "cameras": [
+                {
+                    "channel_no": 1,
+                    "label": "Front",
+                    "rtsp_url": "rtsp://127.0.0.1:554/front",
+                }
+            ],
+        }
+    }
+
+    response = await client.patch(
+        f"/api/vehicles/{vehicle.id}", json=payload, headers=auth_headers
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["device_id"] is not None
+    assert data["device_serial"] == "updated-device-001"
+    assert data["sim_number"] == "9000001002"
+    assert data["latest"]["device_id"] == data["device_id"]
+
+
+async def test_vehicle_response_prefers_device_with_sim_for_display(
+    client, auth_headers, sample_vehicles, db: AsyncSession
+):
+    vehicle = sample_vehicles[0]
+    tracker_device = Device(
+        vehicle_id=vehicle.id,
+        device_serial="tracker-without-sim",
+        sim_number="",
+        protocol=Protocol.other,
+        source=DeviceSource.traccar,
+        external_device_identifier="tracker-without-sim",
+    )
+    camera_device = Device(
+        vehicle_id=vehicle.id,
+        device_serial="camera-device-with-sim",
+        sim_number="9000001999",
+        protocol=Protocol.other,
+        source=DeviceSource.simulator,
+    )
+    db.add_all([tracker_device, camera_device])
+    await db.flush()
+
+    latest = await db.get(VehicleLatest, vehicle.id)
+    latest.device_id = tracker_device.id
+    await db.commit()
+
+    response = await client.get(f"/api/vehicles/{vehicle.id}", headers=auth_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["device_id"] == camera_device.id
+    assert data["device_serial"] == "camera-device-with-sim"
+    assert data["sim_number"] == "9000001999"
+    assert data["latest"]["device_id"] == tracker_device.id

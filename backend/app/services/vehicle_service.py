@@ -12,12 +12,24 @@ def _select_vehicle_device(vehicle: Vehicle, latest: VehicleLatest | None) -> De
     devices = list(vehicle.devices or [])
     if not devices:
         return None
-    if latest and latest.device_id is not None:
-        for device in devices:
-            if device.id == latest.device_id:
-                return device
-    return devices[0]
 
+    latest_device: Device | None = None
+    if latest and latest.device_id is not None:
+        latest_device = next(
+            (device for device in devices if device.id == latest.device_id),
+            None,
+        )
+        if latest_device and latest_device.sim_number.strip():
+            return latest_device
+
+    device_with_sim = next(
+        (device for device in devices if device.sim_number.strip()),
+        None,
+    )
+    if device_with_sim:
+        return device_with_sim
+
+    return latest_device or devices[0]
 
 async def _vehicle_with_latest(vehicle: Vehicle, latest: VehicleLatest | None) -> VehicleWithLatest:
     device = _select_vehicle_device(vehicle, latest)
