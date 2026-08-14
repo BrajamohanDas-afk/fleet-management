@@ -80,6 +80,23 @@ body {
   transition: background-color 0.2s, color 0.2s;
 }
 
+html,
+body,
+#root {
+  height: 100%;
+}
+
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 @layer components {
   .app-select {
     appearance: none;

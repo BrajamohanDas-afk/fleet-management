@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import { LatLngBounds } from 'leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import type { LatLngExpression } from 'leaflet';
 import { useAllVehicles } from '../hooks/useAllVehicles';
 import { useVideoChannels } from '../hooks/useVideoChannels';
@@ -11,6 +10,7 @@ import VideoPanel from '../components/video/VideoPanel';
 import SaveVideoModal from '../components/video/SaveVideoModal';
 import RecordingsModal from '../components/video/RecordingsModal';
 import { formatInIst } from '../utils/formatDate';
+import { MAP_MIN_ZOOM, MAP_TILE_LAYER, WORLD_BOUNDS } from '../constants/map';
 import type { DeviceChannelOut, DeviceHealth, VehicleStatus } from '../types';
 
 type LayoutMode = 'side-by-side' | 'front-focus' | 'rear-focus';
@@ -54,13 +54,43 @@ function formatLastSeen(value: string | null | undefined): string {
 }
 
 const DEFAULT_CENTER: LatLngExpression = [17.385, 78.4867];
-const HYDERABAD_BOUNDS = new LatLngBounds(
-  [17.25, 78.35],
-  [17.55, 78.65]
-);
+
+function VideoMapController({
+  center,
+  vehicleId,
+}: {
+  center: LatLngExpression;
+  vehicleId: number;
+}) {
+  const map = useMap();
+  const lastVehicleIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const isSameVehicle = lastVehicleIdRef.current === vehicleId;
+    lastVehicleIdRef.current = vehicleId;
+
+    if (isSameVehicle) {
+      map.panTo(center, { animate: true });
+      return;
+    }
+
+    map.setView(center, 14, { animate: true });
+  }, [center, map, vehicleId]);
+
+  return null;
+}
 
 export default function VideoTelematics() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const focusedChannelNo = useMemo(() => {
+    const raw = searchParams.get('channelNo');
+    if (!raw) return null;
+    const parsed = Number(raw);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  }, [searchParams]);
+  const shouldAutostart = searchParams.get('autostart') === '1';
+  const cameraSectionRef = useRef<HTMLDivElement | null>(null);
+  const autostartKeyRef = useRef<string | null>(null);
   const {
     vehicles,
     isLoading: vehiclesLoading,
@@ -110,7 +140,16 @@ export default function VideoTelematics() {
   const handleVehicleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const id = Number(event.target.value);
     setSelectedVehicleId(id);
+    setIsStreaming(false);
+    autostartKeyRef.current = null;
     setSearchParams({ vehicleId: String(id) });
+  };
+
+  const handleLayoutChange = (nextLayout: LayoutMode) => {
+    setLayout(nextLayout);
+    if (selectedVehicleId) {
+      setSearchParams({ vehicleId: String(selectedVehicleId) });
+    }
   };
 
   const handleStartCameras = async () => {
@@ -161,6 +200,23 @@ export default function VideoTelematics() {
   const handleSaveVideo = () => setIsSaveModalOpen(true);
   const handleSavedVideos = () => setIsRecordingsModalOpen(true);
 
+  useEffect(() => {
+    if (!shouldAutostart || isStreaming || !selectedVehicle || !deviceId || channelsLoading || channels.length === 0) return;
+    if (focusedChannelNo && !channels.some((channel) => channel.channel_no === focusedChannelNo)) return;
+
+    const key = `${selectedVehicle.id}:${deviceId}:${focusedChannelNo ?? 'all'}`;
+    if (autostartKeyRef.current === key) return;
+    autostartKeyRef.current = key;
+    void handleStartCameras();
+  }, [channels, channelsLoading, deviceId, focusedChannelNo, isStreaming, selectedVehicle, shouldAutostart]);
+
+  useEffect(() => {
+    if (!focusedChannelNo || panels.length === 0) return;
+    window.setTimeout(() => {
+      cameraSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+  }, [focusedChannelNo, panels.length]);
+
   const cameraState = deriveCameraState(health);
   const configuredCameraCount = channels.length;
   const visibleCameraCount = panels.length;
@@ -168,10 +224,13 @@ export default function VideoTelematics() {
     ? `${cameraState} (${visibleCameraCount}/${configuredCameraCount} visible)`
     : cameraState;
   const latest = selectedVehicle?.latest;
-  const mapCenter: LatLngExpression =
-    latest?.latitude && latest?.longitude
-      ? [latest.latitude, latest.longitude]
-      : DEFAULT_CENTER;
+  const mapCenter = useMemo<LatLngExpression>(
+    () =>
+      latest?.latitude != null && latest?.longitude != null
+        ? [latest.latitude, latest.longitude]
+        : DEFAULT_CENTER,
+    [latest?.latitude, latest?.longitude]
+  );
 
   const frontPanel = panels.find((p) =>
     p.label.toLowerCase().includes('front')
@@ -179,6 +238,12 @@ export default function VideoTelematics() {
   const rearPanel = panels.find((p) =>
     p.label.toLowerCase().includes('rear')
   ) ?? panels[1];
+  const focusedPanel = focusedChannelNo
+    ? panels.find((panel) => panel.channel_no === focusedChannelNo) ?? null
+    : null;
+  const secondaryPanels = focusedPanel
+    ? panels.filter((panel) => panel.channel_no !== focusedPanel.channel_no)
+    : [];
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 lg:px-8">
@@ -215,7 +280,7 @@ export default function VideoTelematics() {
                 <button
                   key={option.value}
                   type="button"
-                  onClick={() => setLayout(option.value)}
+                  onClick={() => handleLayoutChange(option.value)}
                   className={[
                     'rounded-md px-3 py-1.5 text-sm font-medium',
                     layout === option.value
@@ -298,74 +363,63 @@ export default function VideoTelematics() {
         )}
 
         {panels.length > 0 && (
-          <div
-            className={[
-              'grid gap-5',
-              layout === 'side-by-side' && panels.length > 1 ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1',
-            ].join(' ')}
-          >
-            {layout === 'side-by-side' && (
-              <>
-                {panels.map((panel) => (
-                  <VideoPanel
-                    key={panel.channel_no}
-                    streamUrl={panel.stream_url}
-                    channelNo={panel.channel_no}
-                    label={panel.label}
-                    layout={layout}
-                    health={panel.health}
-                    autoStart={isStreaming}
-                    reconnectSignal={reconnectSignal}
-                  />
-                ))}
-              </>
-            )}
-
-            {layout === 'front-focus' && frontPanel && (
-              <>
+          <div ref={cameraSectionRef}>
+            {focusedPanel ? (
+              <div className="space-y-4">
                 <VideoPanel
-                  key={frontPanel.channel_no}
-                  streamUrl={frontPanel.stream_url}
-                  channelNo={frontPanel.channel_no}
-                  label={frontPanel.label}
+                  key={focusedPanel.channel_no}
+                  streamUrl={focusedPanel.stream_url}
+                  channelNo={focusedPanel.channel_no}
+                  label={focusedPanel.label}
                   layout={layout}
-                  health={frontPanel.health}
+                  health={focusedPanel.health}
                   isFocused
                   autoStart={isStreaming}
                   reconnectSignal={reconnectSignal}
                 />
-                {rearPanel && (
+                {secondaryPanels.length > 0 && (
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <VideoPanel
-                      key={rearPanel.channel_no}
-                      streamUrl={rearPanel.stream_url}
-                      channelNo={rearPanel.channel_no}
-                      label={rearPanel.label}
-                      layout={layout}
-                      health={rearPanel.health}
-                      autoStart={isStreaming}
-                      reconnectSignal={reconnectSignal}
-                    />
+                    {secondaryPanels.map((panel) => (
+                      <VideoPanel
+                        key={panel.channel_no}
+                        streamUrl={panel.stream_url}
+                        channelNo={panel.channel_no}
+                        label={panel.label}
+                        layout={layout}
+                        health={panel.health}
+                        autoStart={isStreaming}
+                        reconnectSignal={reconnectSignal}
+                      />
+                    ))}
                   </div>
                 )}
-              </>
-            )}
+              </div>
+            ) : (
+              <div
+                className={[
+                  'grid gap-5',
+                  layout === 'side-by-side' && panels.length > 1 ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1',
+                ].join(' ')}
+              >
+                {layout === 'side-by-side' && (
+                  <>
+                    {panels.map((panel) => (
+                      <VideoPanel
+                        key={panel.channel_no}
+                        streamUrl={panel.stream_url}
+                        channelNo={panel.channel_no}
+                        label={panel.label}
+                        layout={layout}
+                        health={panel.health}
+                        autoStart={isStreaming}
+                        reconnectSignal={reconnectSignal}
+                      />
+                    ))}
+                  </>
+                )}
 
-            {layout === 'rear-focus' && rearPanel && (
-              <>
-                <VideoPanel
-                  key={rearPanel.channel_no}
-                  streamUrl={rearPanel.stream_url}
-                  channelNo={rearPanel.channel_no}
-                  label={rearPanel.label}
-                  layout={layout}
-                  health={rearPanel.health}
-                  isFocused
-                  autoStart={isStreaming}
-                  reconnectSignal={reconnectSignal}
-                />
-                {frontPanel && frontPanel.channel_no !== rearPanel.channel_no && (
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {layout === 'front-focus' && frontPanel && (
+                  <>
                     <VideoPanel
                       key={frontPanel.channel_no}
                       streamUrl={frontPanel.stream_url}
@@ -373,12 +427,57 @@ export default function VideoTelematics() {
                       label={frontPanel.label}
                       layout={layout}
                       health={frontPanel.health}
+                      isFocused
                       autoStart={isStreaming}
                       reconnectSignal={reconnectSignal}
                     />
-                  </div>
+                    {rearPanel && (
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <VideoPanel
+                          key={rearPanel.channel_no}
+                          streamUrl={rearPanel.stream_url}
+                          channelNo={rearPanel.channel_no}
+                          label={rearPanel.label}
+                          layout={layout}
+                          health={rearPanel.health}
+                          autoStart={isStreaming}
+                          reconnectSignal={reconnectSignal}
+                        />
+                      </div>
+                    )}
+                  </>
                 )}
-              </>
+
+                {layout === 'rear-focus' && rearPanel && (
+                  <>
+                    <VideoPanel
+                      key={rearPanel.channel_no}
+                      streamUrl={rearPanel.stream_url}
+                      channelNo={rearPanel.channel_no}
+                      label={rearPanel.label}
+                      layout={layout}
+                      health={rearPanel.health}
+                      isFocused
+                      autoStart={isStreaming}
+                      reconnectSignal={reconnectSignal}
+                    />
+                    {frontPanel && frontPanel.channel_no !== rearPanel.channel_no && (
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <VideoPanel
+                          key={frontPanel.channel_no}
+                          streamUrl={frontPanel.stream_url}
+                          channelNo={frontPanel.channel_no}
+                          label={frontPanel.label}
+                          layout={layout}
+                          health={frontPanel.health}
+                          autoStart={isStreaming}
+                          reconnectSignal={reconnectSignal}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -399,15 +498,20 @@ export default function VideoTelematics() {
                 key={selectedVehicle.id}
                 center={mapCenter}
                 zoom={14}
-                scrollWheelZoom={false}
+                scrollWheelZoom
+                minZoom={MAP_MIN_ZOOM}
+                worldCopyJump={false}
+                maxBounds={WORLD_BOUNDS}
+                maxBoundsViscosity={1}
                 className="h-64 w-full rounded-lg"
-                maxBounds={HYDERABAD_BOUNDS}
               >
                 <TileLayer
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  attribution={MAP_TILE_LAYER.attribution}
+                  url={MAP_TILE_LAYER.url}
+                  noWrap
                 />
-                {latest?.latitude && latest?.longitude && (
+                <VideoMapController center={mapCenter} vehicleId={selectedVehicle.id} />
+                {latest?.latitude != null && latest?.longitude != null && (
                   <Marker position={[latest.latitude, latest.longitude]}>
                     <Popup>{selectedVehicle.registration_no}</Popup>
                   </Marker>

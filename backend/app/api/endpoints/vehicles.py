@@ -19,7 +19,6 @@ from app.schemas.vehicle import (
     CameraUpdatePayload,
     VehicleCreate,
     VehicleDeviceUpdate,
-    VehicleOut,
     VehicleUpdate,
     VehicleWithLatest,
 )
@@ -322,13 +321,13 @@ async def list_vehicles(
     )
 
 
-@router.post("", response_model=VehicleOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=VehicleWithLatest, status_code=status.HTTP_201_CREATED)
 async def create_vehicle(
     payload: VehicleCreate,
     db: AsyncSession = Depends(get_db),
     redis: Redis = Depends(get_redis),
     current_user: dict = Depends(get_current_user),
-) -> VehicleOut:
+) -> VehicleWithLatest:
     _ = current_user
     existing = await vehicle_repository.get_by_registration(db, payload.registration_no)
     if existing:
@@ -361,8 +360,10 @@ async def create_vehicle(
 
     await db.commit()
     await _publish_channel_commands(redis, vehicle_id=vehicle.id, commands=commands)
-    await db.refresh(vehicle)
-    return VehicleOut.model_validate(vehicle)
+    enriched_vehicle = await get_vehicle_with_latest(db, vehicle.id)
+    if enriched_vehicle is None:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    return enriched_vehicle
 
 
 @router.post("/cameras/test", response_model=CameraTestResponse)
@@ -387,14 +388,14 @@ async def get_vehicle(
     return vehicle
 
 
-@router.patch("/{vehicle_id}", response_model=VehicleOut)
+@router.patch("/{vehicle_id}", response_model=VehicleWithLatest)
 async def update_vehicle(
     vehicle_id: int,
     payload: VehicleUpdate,
     db: AsyncSession = Depends(get_db),
     redis: Redis = Depends(get_redis),
     current_user: dict = Depends(get_current_user),
-) -> VehicleOut:
+) -> VehicleWithLatest:
     _ = current_user
     vehicle = await vehicle_repository.get(db, vehicle_id)
     if vehicle is None:
@@ -424,8 +425,10 @@ async def update_vehicle(
 
     await db.commit()
     await _publish_channel_commands(redis, vehicle_id=vehicle_id, commands=commands)
-    await db.refresh(vehicle)
-    return VehicleOut.model_validate(vehicle)
+    enriched_vehicle = await get_vehicle_with_latest(db, vehicle_id)
+    if enriched_vehicle is None:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    return enriched_vehicle
 
 
 @router.delete("/{vehicle_id}", status_code=status.HTTP_204_NO_CONTENT)

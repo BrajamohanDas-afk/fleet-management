@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import type { LatLngExpression } from 'leaflet';
 import VehicleMarker from './VehicleMarker';
 import type { FleetPosition } from '../../types';
+import { MAP_MIN_ZOOM, MAP_TILE_LAYER, WORLD_BOUNDS } from '../../constants/map';
 
 interface MapViewProps {
   positions: FleetPosition[];
@@ -73,16 +74,20 @@ export default function MapView({
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-xl bg-white shadow-sm">
-      {/* OSM tiles are demo/local-only; replace before production. */}
       <MapContainer
         center={center}
         zoom={DEFAULT_ZOOM}
+        minZoom={MAP_MIN_ZOOM}
+        maxBounds={WORLD_BOUNDS}
+        maxBoundsViscosity={1}
         scrollWheelZoom
+        worldCopyJump={false}
         className="h-full w-full"
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution={MAP_TILE_LAYER.attribution}
+          noWrap
+          url={MAP_TILE_LAYER.url}
         />
         <MapController
           positions={positions}
