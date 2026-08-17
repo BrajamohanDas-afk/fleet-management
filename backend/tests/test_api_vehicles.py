@@ -126,7 +126,7 @@ async def test_delete_vehicle_with_tracker_dependencies(
         device_serial="tracker-delete-test",
         sim_number="n/a",
         protocol=Protocol.other,
-        source=DeviceSource.traccar,
+        source=DeviceSource.simulator,
         external_device_identifier="delete-test-phone",
     )
     db.add(device)
@@ -258,7 +258,7 @@ async def test_vehicle_response_prefers_device_with_sim_for_display(
         device_serial="tracker-without-sim",
         sim_number="",
         protocol=Protocol.other,
-        source=DeviceSource.traccar,
+        source=DeviceSource.simulator,
         external_device_identifier="tracker-without-sim",
     )
     camera_device = Device(

@@ -11,9 +11,8 @@ The project runs a local fleet operations stack:
 - MediaMTX for H.264/WebRTC video delivery.
 - Python simulator for GPS telemetry and development video streams.
 - Go protocol layer for scalable TCP telemetry intake and RTSP-to-MediaMTX relays.
-- Self-hosted Traccar for phone-based GPS tracking (see `docs/traccar.md`).
 
-Production DVR integration is not implemented yet. The simulator remains available through `POST /api/dev/ingest/telemetry`; phone tracking uses Traccar and the scheduled fleet sync worker.
+Production DVR integration is not implemented yet. The simulator remains available through `POST /api/dev/ingest/telemetry`.
 
 ## Requirements
 
@@ -67,9 +66,6 @@ For same-network hosting from a Windows VM, see [WINDOWS_VM_HOSTING.md](WINDOWS_
 | API | `http://localhost:8000` | FastAPI backend |
 | PostgreSQL | `localhost:15432` | Host access to database |
 | Redis | `localhost:6379` | Cache and pub/sub |
-| Traccar web/API | `http://localhost:8082` | Traccar admin/API |
-| Traccar Client upload | `http://localhost:5055` | Native phone app location upload |
-| Traccar protocol ports | `5055`, `5001` | Device protocol examples |
 | MediaMTX API | `http://localhost:8889` | Media server control API |
 | MediaMTX WHEP | `http://localhost:8890` | Browser WebRTC playback |
 | MediaMTX RTSP | `localhost:8554` | Simulator stream publish |
@@ -143,13 +139,6 @@ MEDIAMTX_RTSP_PORT=8554
 MEDIAMTX_HTTP_PORT=8890
 MEDIAMTX_API_PORT=8889
 VITE_API_URL=http://localhost:8000/api
-TRACCAR_URL=http://traccar:8082
-TRACCAR_PUBLIC_URL=http://localhost:8082
-TRACCAR_CLIENT_PUBLIC_URL=http://localhost:5055
-TRACCAR_USERNAME=admin
-TRACCAR_PASSWORD=admin
-TRACCAR_SYNC_INTERVAL_SECONDS=10
-TRACCAR_STALE_SECONDS=90
 PUBLIC_SHARE_BASE_URL=http://localhost:5173
 ```
 

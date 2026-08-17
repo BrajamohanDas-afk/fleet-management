@@ -21,7 +21,7 @@ When someone opens the app from another laptop on the same network:
 ```text
 User browser -> http://172.17.105.187:5173
 Frontend -> http://172.17.105.187:8000/api
-API container -> database, Redis, MediaMTX, Traccar, cameras
+API container -> database, Redis, MediaMTX, cameras
 ```
 
 Do not give users a `localhost` URL. `localhost` means their own laptop, not the VM.
@@ -141,8 +141,6 @@ Also find these API environment values:
 
 ```yaml
 MEDIAMTX_PUBLIC_HOST: localhost
-TRACCAR_PUBLIC_URL: http://localhost:8082
-TRACCAR_CLIENT_PUBLIC_URL: http://localhost:5055
 PUBLIC_SHARE_BASE_URL: http://localhost:5173
 ```
 
@@ -150,8 +148,6 @@ For same-network access, change them to:
 
 ```yaml
 MEDIAMTX_PUBLIC_HOST: 172.17.105.187
-TRACCAR_PUBLIC_URL: http://172.17.105.187:8082
-TRACCAR_CLIENT_PUBLIC_URL: http://172.17.105.187:5055
 PUBLIC_SHARE_BASE_URL: http://172.17.105.187:5173
 ```
 
@@ -164,15 +160,13 @@ Run:
 ```powershell
 New-NetFirewallRule -DisplayName "Fleet Frontend 5173" -Direction Inbound -Protocol TCP -LocalPort 5173 -Action Allow
 New-NetFirewallRule -DisplayName "Fleet API 8000" -Direction Inbound -Protocol TCP -LocalPort 8000 -Action Allow
-New-NetFirewallRule -DisplayName "Fleet Traccar 8082" -Direction Inbound -Protocol TCP -LocalPort 8082 -Action Allow
-New-NetFirewallRule -DisplayName "Fleet Traccar Client 5055" -Direction Inbound -Protocol TCP -LocalPort 5055 -Action Allow
 New-NetFirewallRule -DisplayName "Fleet MediaMTX WHEP 8890" -Direction Inbound -Protocol TCP -LocalPort 8890 -Action Allow
 New-NetFirewallRule -DisplayName "Fleet MediaMTX API 8889" -Direction Inbound -Protocol TCP -LocalPort 8889 -Action Allow
 New-NetFirewallRule -DisplayName "Fleet MediaMTX RTSP 8554" -Direction Inbound -Protocol TCP -LocalPort 8554 -Action Allow
 New-NetFirewallRule -DisplayName "Fleet Protocol TCP 9000" -Direction Inbound -Protocol TCP -LocalPort 9000 -Action Allow
 ```
 
-For only dashboard access, ports `5173` and `8000` are the minimum. For live video, tracking, and device integrations, keep the additional rules.
+For only dashboard access, ports `5173` and `8000` are the minimum. For live video and device integrations, keep the additional rules.
 
 ## 6. Start Everything
 
@@ -207,8 +201,6 @@ fleet-db
 fleet-redis
 fleet-mediamtx
 fleet-protocol-layer
-fleet-traccar
-fleet-traccar-db
 ```
 
 Check frontend from the VM:
@@ -345,7 +337,6 @@ From the VM:
 ```text
 Frontend: http://localhost:5173
 API: http://localhost:8000
-Traccar: http://localhost:8082
 ```
 
 From another laptop on the same network:
@@ -353,7 +344,6 @@ From another laptop on the same network:
 ```text
 Frontend: http://172.17.105.187:5173
 API: http://172.17.105.187:8000
-Traccar: http://172.17.105.187:8082
 ```
 
 ## Security Notes
@@ -366,5 +356,5 @@ Before internet/public hosting:
 - Use HTTPS.
 - Put the app behind a reverse proxy.
 - Restrict allowed origins/CORS.
-- Lock down database, Redis, MediaMTX, and Traccar ports.
+- Lock down database, Redis, and MediaMTX ports.
 - Do not expose development credentials publicly.

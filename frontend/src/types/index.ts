@@ -5,8 +5,8 @@ export type VehicleType = 'bike' | 'car' | 'truck' | 'bus' | 'other';
 export type LicenseStatus = 'valid' | 'expired' | 'pending' | 'suspended';
 
 export type Protocol = 'jt808' | 'sim' | 'other';
-export type DeviceSource = 'simulator' | 'traccar' | 'jt808';
-export type ConnectionStatus = 'waiting' | 'connected' | 'stale' | 'authentication_error' | 'unknown_device' | 'traccar_unavailable';
+export type DeviceSource = 'simulator' | 'jt808';
+export type ConnectionStatus = 'waiting' | 'connected' | 'stale' | 'authentication_error' | 'unknown_device' | 'unavailable';
 
 export interface Vehicle {
   id: number;

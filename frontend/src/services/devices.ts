@@ -24,21 +24,10 @@ export interface DeviceCreate {
   external_device_identifier?: string | null;
 }
 
-export interface PairingInfo {
-  device_id: number;
-  server_url: string;
-  identifier: string;
-  setup_instructions: string[];
-}
-
 export async function getVehicleDevices(vehicleId: number): Promise<DeviceOut[]> {
   return (await api.get<DeviceOut[]>(`/vehicles/${vehicleId}/devices`)).data;
 }
 
 export async function createVehicleDevice(vehicleId: number, data: DeviceCreate): Promise<DeviceOut> {
   return (await api.post<DeviceOut>(`/vehicles/${vehicleId}/devices`, data)).data;
-}
-
-export async function getPairingInfo(deviceId: number): Promise<PairingInfo> {
-  return (await api.post<PairingInfo>(`/devices/${deviceId}/pairing`)).data;
 }

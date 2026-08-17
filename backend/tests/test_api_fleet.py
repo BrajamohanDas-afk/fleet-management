@@ -85,7 +85,7 @@ async def test_positions_db_fallback_when_redis_empty(
         device_serial="vh001-10",
         sim_number="n/a",
         protocol=Protocol.other,
-        source=DeviceSource.traccar,
+        source=DeviceSource.simulator,
         external_device_identifier="vh001-10",
         connection_status=ConnectionStatus.connected,
     )
@@ -111,7 +111,7 @@ async def test_positions_db_fallback_when_redis_empty(
     data = response.json()
     assert len(data) == 1
     assert data[0]["vehicle_id"] == vehicle.id
-    assert data[0]["source"] == "traccar"
+    assert data[0]["source"] == "simulator"
     assert data[0]["connection_status"] == "connected"
 
 

@@ -1,4 +1,4 @@
-"""Add external tracker metadata and expiring public share links."""
+"""Add device metadata and expiring public share links."""
 
 from typing import Sequence, Union
 
@@ -12,12 +12,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.execute("CREATE TYPE devicesource AS ENUM ('simulator', 'traccar', 'jt808')")
+    op.execute("CREATE TYPE devicesource AS ENUM ('simulator', 'jt808')")
     op.execute(
         "CREATE TYPE connectionstatus AS ENUM "
         "('waiting', 'connected', 'stale', 'auth_error', 'unknown_device', 'unavailable')"
     )
-    op.add_column("devices", sa.Column("source", sa.Enum("simulator", "traccar", "jt808", name="devicesource"), nullable=True))
+    op.add_column("devices", sa.Column("source", sa.Enum("simulator", "jt808", name="devicesource"), nullable=True))
     op.add_column("devices", sa.Column("external_device_id", sa.Integer(), nullable=True))
     op.add_column("devices", sa.Column("external_device_identifier", sa.String(128), nullable=True))
     op.add_column("devices", sa.Column("connection_status", sa.Enum("waiting", "connected", "stale", "auth_error", "unknown_device", "unavailable", name="connectionstatus"), nullable=True))

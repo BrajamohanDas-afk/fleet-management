@@ -20,7 +20,6 @@ class Protocol(str, enum.Enum):
 
 class DeviceSource(str, enum.Enum):
     simulator = "simulator"
-    traccar = "traccar"
     jt808 = "jt808"
 
 
@@ -30,7 +29,7 @@ class ConnectionStatus(str, enum.Enum):
     stale = "stale"
     auth_error = "authentication_error"
     unknown_device = "unknown_device"
-    unavailable = "traccar_unavailable"
+    unavailable = "unavailable"
 
 
 class Device(Base):

@@ -9,7 +9,7 @@ class DeviceCreate(BaseModel):
     device_serial: str
     sim_number: str = ""
     protocol: Protocol = Protocol.other
-    source: DeviceSource = DeviceSource.traccar
+    source: DeviceSource = DeviceSource.simulator
     external_device_id: int | None = None
     external_device_identifier: str | None = None
 
@@ -22,13 +22,6 @@ class DeviceUpdate(BaseModel):
     source: DeviceSource | None = None
     external_device_id: int | None = None
     external_device_identifier: str | None = None
-
-
-class PairingOut(BaseModel):
-    device_id: int
-    server_url: str
-    identifier: str
-    setup_instructions: list[str]
 
 
 class DeviceChannelOut(BaseModel):
