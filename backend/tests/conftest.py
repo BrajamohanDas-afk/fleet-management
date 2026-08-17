@@ -182,7 +182,11 @@ async def client(db) -> AsyncClient:
 @pytest_asyncio.fixture
 async def auth_headers(client) -> dict[str, str]:
     response = await client.post(
-        "/api/auth/login", json={"username": "admin", "password": "admin"}
+        "/api/auth/login",
+        json={
+            "username": settings.ADMIN_USERNAME,
+            "password": settings.ADMIN_PASSWORD,
+        },
     )
     assert response.status_code == 200
     token = response.json()["access_token"]

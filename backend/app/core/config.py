@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://redis:6379/0"
     SECRET_KEY: str = "dev-secret-change-me"
     ENV: str = "dev"
+    ADMIN_USERNAME: str = "admin"
+    ADMIN_PASSWORD: str = "admin"
     MEDIAMTX_HOST: str = "mediamtx"
     # Docker-internal hostname is not resolvable by a browser.  Keep this
     # separate from MEDIAMTX_HOST, which is used for server-to-server calls.

@@ -13,7 +13,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=Fals
 async def get_current_user(token: str | None = Depends(oauth2_scheme)) -> dict[str, str]:
     # Dev bypass: no login required while ENV=dev.
     if settings.ENV == "dev":
-        return {"username": "admin"}
+        return {"username": settings.ADMIN_USERNAME}
 
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -25,7 +25,7 @@ async def get_current_user(token: str | None = Depends(oauth2_scheme)) -> dict[s
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
         username: str | None = payload.get("sub")
-        if username is None or username != "admin":
+        if username is None or username != settings.ADMIN_USERNAME:
             raise credentials_exception
     except JWTError:
         raise credentials_exception

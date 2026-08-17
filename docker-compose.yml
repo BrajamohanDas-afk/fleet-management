@@ -53,6 +53,8 @@ services:
       TEST_DATABASE_URL: postgresql+asyncpg://fleet_user:fleet_pass@db:5432/fleet_db
       SECRET_KEY: dev-secret-change-me
       ENV: dev
+      ADMIN_USERNAME: fleet-admin
+      ADMIN_PASSWORD: "FleetOps@2026"
       MEDIAMTX_HOST: mediamtx
       MEDIAMTX_PUBLIC_HOST: localhost
       MEDIAMTX_RTSP_PORT: "8554"
