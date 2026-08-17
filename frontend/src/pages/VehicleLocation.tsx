@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Radio, Search, Eye, EyeOff } from 'lucide-react';
-import type { LatLngExpression } from 'leaflet';
 import { useFleetPositions } from '../hooks/useFleetPositions';
 import { useAllVehicles } from '../hooks/useAllVehicles';
 import CounterBand, { countByStatus } from '../components/location/CounterBand';
 import MapView from '../components/location/MapView';
 import VehicleCardRail from '../components/location/VehicleCardRail';
+import type { MapCoordinate } from '../constants/map';
 import type { FleetPosition, VehicleStatus } from '../types';
 import type { VehicleOut } from '../services/vehicles';
 
@@ -48,7 +48,7 @@ export default function VehicleLocation() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<VehicleStatus | ''>('');
   const [showLabels, setShowLabels] = useState(false);
-  const [focusTarget, setFocusTarget] = useState<LatLngExpression | null>(null);
+  const [focusTarget, setFocusTarget] = useState<MapCoordinate | null>(null);
 
   const positions = useMemo(
     () => enrichPositions(rawPositions, allVehicles),

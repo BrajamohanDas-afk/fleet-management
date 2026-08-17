@@ -23,6 +23,11 @@ function nextReconnectDelayMs(attempt: number): number {
 }
 
 function deriveWsUrl(apiBaseUrl: string, path: string): string {
+  if (apiBaseUrl.startsWith('/')) {
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${wsProtocol}//${window.location.host}${path}`;
+  }
+
   // Drop a trailing /api segment and switch from http(s) to ws(s).
   const base = apiBaseUrl.replace(/\/api\/?$/, '');
   const wsBase = base

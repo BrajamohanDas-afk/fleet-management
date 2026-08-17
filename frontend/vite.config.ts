@@ -2,6 +2,8 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
+const devProxyTarget = process.env.VITE_DEV_PROXY_TARGET || 'http://localhost:8000';
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -12,5 +14,17 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    allowedHosts: ['.trycloudflare.com'],
+    proxy: {
+      '/api': {
+        target: devProxyTarget,
+        changeOrigin: true,
+      },
+      '/ws': {
+        target: devProxyTarget,
+        changeOrigin: true,
+        ws: true,
+      },
+    },
   },
 });

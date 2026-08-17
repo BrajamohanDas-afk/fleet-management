@@ -202,6 +202,6 @@ npx playwright test
 
 - Video must reach the browser through MediaMTX, not FastAPI.
 - Redis is required for latest-position state and WebSocket fan-out.
-- OSM map tiles are acceptable for local demo use only. Use MapTiler, Stadia, or self-hosted tiles before real deployment.
+- The dashboard location map uses MapLibre with OpenFreeMap tiles, so no paid map API key is required.
 - The current auth is a single development user. It is not a production identity system.
 - Real DVRs are expected to push binary protocol traffic to a future protocol adapter. Do not treat the dev HTTP ingest endpoint as production device ingest.

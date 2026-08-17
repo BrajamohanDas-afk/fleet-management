@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Bike, Bus, Car, HelpCircle, Link, Truck, Trash2 } from 'lucide-react';
+import { Bike, Bus, Car, HelpCircle, Link, Navigation, Truck, Trash2 } from 'lucide-react';
 import type { VehicleOut } from '../../services/vehicles';
 import type { VehicleStatus, LicenseStatus, VehicleType } from '../../types';
 
@@ -37,9 +37,16 @@ interface VehicleCardProps {
   onEdit: (vehicle: VehicleOut) => void;
   onDelete: (id: number) => void;
   onShare: (vehicle: VehicleOut) => void;
+  onTrack: (vehicle: VehicleOut) => void;
 }
 
-export default function VehicleCard({ vehicle, onEdit, onDelete, onShare }: VehicleCardProps) {
+export default function VehicleCard({
+  vehicle,
+  onEdit,
+  onDelete,
+  onShare,
+  onTrack,
+}: VehicleCardProps) {
   const navigate = useNavigate();
   const TypeIcon = VEHICLE_TYPE_ICONS[vehicle.vehicle_type];
   const status = vehicle.latest?.status ?? 'offline';
@@ -154,6 +161,14 @@ export default function VehicleCard({ vehicle, onEdit, onDelete, onShare }: Vehi
         >
           <Link className="h-4 w-4" />
           Share
+        </button>
+        <button
+          type="button"
+          onClick={() => onTrack(vehicle)}
+          className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-sm font-medium text-primary-700 hover:bg-primary-100"
+        >
+          <Navigation className="h-4 w-4" />
+          Track
         </button>
       </div>
     </div>

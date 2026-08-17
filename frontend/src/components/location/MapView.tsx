@@ -1,107 +1,162 @@
-import { useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, useMap } from 'react-leaflet';
-import type { LatLngExpression } from 'leaflet';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import maplibregl, { type Map as MapLibreMap } from 'maplibre-gl';
 import VehicleMarker from './VehicleMarker';
 import type { FleetPosition } from '../../types';
-import { MAP_MIN_ZOOM, MAP_TILE_LAYER, WORLD_BOUNDS } from '../../constants/map';
+import {
+  DEFAULT_MAP_CENTER,
+  MAP_DEFAULT_ZOOM,
+  MAP_FOCUS_ZOOM,
+  MAP_MIN_ZOOM,
+  MAP_STYLE_URL,
+  type MapCoordinate,
+} from '../../constants/map';
 
 interface MapViewProps {
   positions: FleetPosition[];
   showPermanentLabels: boolean;
-  focusTarget: LatLngExpression | null;
+  focusTarget: MapCoordinate | null;
+  onSelectVehicle?: (position: FleetPosition) => void;
 }
 
-const DEFAULT_CENTER: LatLngExpression = [17.385, 78.4867];
-const DEFAULT_ZOOM = 12;
+function toLngLat([lat, lng]: MapCoordinate): [number, number] {
+  return [lng, lat];
+}
 
-/**
- * Internal controller that reacts to props and commands the Leaflet map
- * instance (auto-fit on first load, fly-to on track).
- */
-function MapController({
-  positions,
-  focusTarget,
-  hasFittedRef,
-}: {
-  positions: FleetPosition[];
-  focusTarget: LatLngExpression | null;
-  hasFittedRef: React.MutableRefObject<boolean>;
-}) {
-  const map = useMap();
+function getPositionCoordinate(position: FleetPosition): MapCoordinate | null {
+  if (position.latitude == null || position.longitude == null) return null;
+  return [position.latitude, position.longitude];
+}
 
-  // Auto-fit bounds once on first data load, then never steal zoom again.
-  useEffect(() => {
-    if (hasFittedRef.current) return;
-    const coords: [number, number][] = positions
-      .filter(
-        (p): p is FleetPosition & { latitude: number; longitude: number } =>
-          p.latitude != null && p.longitude != null
-      )
-      .map((p) => [p.latitude, p.longitude]);
+function buildBounds(positions: FleetPosition[]): [[number, number], [number, number]] | null {
+  let minLat = Number.POSITIVE_INFINITY;
+  let maxLat = Number.NEGATIVE_INFINITY;
+  let minLng = Number.POSITIVE_INFINITY;
+  let maxLng = Number.NEGATIVE_INFINITY;
 
-    if (coords.length === 0) return;
+  positions.forEach((position) => {
+    if (position.latitude == null || position.longitude == null) return;
+    minLat = Math.min(minLat, position.latitude);
+    maxLat = Math.max(maxLat, position.latitude);
+    minLng = Math.min(minLng, position.longitude);
+    maxLng = Math.max(maxLng, position.longitude);
+  });
 
-    if (coords.length === 1) {
-      map.setView(coords[0], DEFAULT_ZOOM);
-    } else {
-      map.fitBounds(coords, { padding: [40, 40] });
-    }
-    hasFittedRef.current = true;
-  }, [positions, map, hasFittedRef]);
-
-  // Fly to a vehicle when the Track button is pressed.
-  useEffect(() => {
-    if (!focusTarget) return;
-    map.flyTo(focusTarget, Math.max(map.getZoom(), 16), {
-      duration: 1,
-    });
-  }, [focusTarget, map]);
-
-  return null;
+  if (!Number.isFinite(minLat) || !Number.isFinite(minLng)) return null;
+  return [
+    [minLng, minLat],
+    [maxLng, maxLat],
+  ];
 }
 
 export default function MapView({
   positions,
   showPermanentLabels,
   focusTarget,
+  onSelectVehicle,
 }: MapViewProps) {
+  const mapElementRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
   const hasFittedRef = useRef(false);
+  const [map, setMap] = useState<MapLibreMap | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const center: LatLngExpression =
-    positions.length > 0 && positions[0].latitude != null && positions[0].longitude != null
-      ? [positions[0].latitude, positions[0].longitude]
-      : DEFAULT_CENTER;
+  const validPositions = useMemo(
+    () =>
+      positions.filter(
+        (position) =>
+          position.latitude != null && position.longitude != null
+      ),
+    [positions]
+  );
+
+  useEffect(() => {
+    if (!mapElementRef.current || mapRef.current) return;
+
+    const nextMap = new maplibregl.Map({
+      container: mapElementRef.current,
+      style: MAP_STYLE_URL,
+      center: toLngLat(DEFAULT_MAP_CENTER),
+      zoom: MAP_DEFAULT_ZOOM,
+      minZoom: MAP_MIN_ZOOM,
+      attributionControl: false,
+    });
+
+    nextMap.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'top-right');
+    nextMap.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
+    nextMap.on('error', () => {
+      setLoadError('The open map could not be loaded. Check the network connection.');
+    });
+    mapRef.current = nextMap;
+    setMap(nextMap);
+
+    return () => {
+      nextMap.remove();
+      mapRef.current = null;
+      setMap(null);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!map || hasFittedRef.current || validPositions.length === 0) return;
+
+    if (validPositions.length === 1) {
+      const coordinate = getPositionCoordinate(validPositions[0]);
+      if (coordinate) {
+        map.easeTo({
+          center: toLngLat(coordinate),
+          zoom: MAP_DEFAULT_ZOOM,
+          duration: 400,
+        });
+      }
+    } else {
+      const bounds = buildBounds(validPositions);
+      if (bounds) {
+        map.fitBounds(bounds, {
+          padding: 40,
+          maxZoom: MAP_FOCUS_ZOOM,
+          duration: 400,
+        });
+      }
+    }
+
+    hasFittedRef.current = true;
+  }, [map, validPositions]);
+
+  useEffect(() => {
+    if (!map || !focusTarget) return;
+    map.easeTo({
+      center: toLngLat(focusTarget),
+      zoom: Math.max(map.getZoom(), MAP_FOCUS_ZOOM),
+      duration: 400,
+    });
+  }, [focusTarget, map]);
 
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-xl bg-white shadow-sm">
-      <MapContainer
-        center={center}
-        zoom={DEFAULT_ZOOM}
-        minZoom={MAP_MIN_ZOOM}
-        maxBounds={WORLD_BOUNDS}
-        maxBoundsViscosity={1}
-        scrollWheelZoom
-        worldCopyJump={false}
-        className="h-full w-full"
-      >
-        <TileLayer
-          attribution={MAP_TILE_LAYER.attribution}
-          noWrap
-          url={MAP_TILE_LAYER.url}
-        />
-        <MapController
-          positions={positions}
-          focusTarget={focusTarget}
-          hasFittedRef={hasFittedRef}
-        />
-        {positions.map((position) => (
+    <div
+      className="relative h-full w-full overflow-hidden rounded-xl bg-white shadow-sm"
+      data-testid="fleet-map-container"
+    >
+      <div ref={mapElementRef} className="h-full w-full" data-testid="fleet-map" />
+      {loadError && (
+        <div className="absolute left-4 top-4 max-w-sm rounded-md border border-red-200 bg-white px-3 py-2 text-sm text-red-700 shadow-sm">
+          {loadError}
+        </div>
+      )}
+      {!map && (
+        <div className="absolute inset-0 flex items-center justify-center bg-white text-sm text-slate-500">
+          Loading map...
+        </div>
+      )}
+      {map &&
+        validPositions.map((position) => (
           <VehicleMarker
             key={position.vehicle_id}
+            map={map}
             position={position}
             showPermanentLabel={showPermanentLabels}
+            onSelectVehicle={onSelectVehicle}
           />
         ))}
-      </MapContainer>
     </div>
   );
 }

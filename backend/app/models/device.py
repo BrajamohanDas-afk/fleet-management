@@ -20,6 +20,7 @@ class Protocol(str, enum.Enum):
 
 class DeviceSource(str, enum.Enum):
     simulator = "simulator"
+    browser = "browser"
     jt808 = "jt808"
 
 

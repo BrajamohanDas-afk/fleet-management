@@ -6,6 +6,7 @@ import VehicleFilters from '../components/vehicles/VehicleFilters';
 import VehicleForm from '../components/vehicles/VehicleForm';
 import type { VehicleCreate, VehicleOut, VehicleUpdate } from '../services/vehicles';
 import ShareModal from '../components/vehicles/ShareModal';
+import TrackingLinkModal from '../components/vehicles/TrackingLinkModal';
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -44,6 +45,7 @@ export default function Vehicles() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [formVehicle, setFormVehicle] = useState<VehicleOut | null>(null);
   const [shareVehicle, setShareVehicle] = useState<VehicleOut | null>(null);
+  const [trackingVehicle, setTrackingVehicle] = useState<VehicleOut | null>(null);
 
   const counters = useMemo(() => {
     const total = vehicles.length;
@@ -145,6 +147,7 @@ export default function Vehicles() {
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 onShare={setShareVehicle}
+                onTrack={setTrackingVehicle}
               />
             ))}
           </div>
@@ -160,6 +163,12 @@ export default function Vehicles() {
         />
       )}
       {shareVehicle && <ShareModal vehicle={shareVehicle} onClose={() => setShareVehicle(null)} />}
+      {trackingVehicle && (
+        <TrackingLinkModal
+          vehicle={trackingVehicle}
+          onClose={() => setTrackingVehicle(null)}
+        />
+      )}
     </div>
   );
 }

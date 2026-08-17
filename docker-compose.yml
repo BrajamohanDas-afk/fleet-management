@@ -54,12 +54,13 @@ services:
       SECRET_KEY: dev-secret-change-me
       ENV: dev
       MEDIAMTX_HOST: mediamtx
-      MEDIAMTX_PUBLIC_HOST: 172.17.104.142
+      MEDIAMTX_PUBLIC_HOST: localhost
       MEDIAMTX_RTSP_PORT: "8554"
       MEDIAMTX_HTTP_PORT: "8890"
       MEDIAMTX_API_PORT: "8889"
       DEV_DEVICE_KEY: dev-device-key
       PUBLIC_SHARE_BASE_URL: http://172.17.104.142:5173
+      TRACKING_PUBLIC_BASE_URL: http://172.17.104.142:5173
     depends_on:
       db:
         condition: service_healthy
@@ -81,7 +82,8 @@ services:
     ports:
       - "5173:5173"
     environment:
-      VITE_API_URL: http://172.17.104.142:8000/api
+      VITE_API_URL: ""
+      VITE_DEV_PROXY_TARGET: http://api:8000
     depends_on:
       api:
         condition: service_started

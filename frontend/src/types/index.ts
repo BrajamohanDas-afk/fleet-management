@@ -5,7 +5,7 @@ export type VehicleType = 'bike' | 'car' | 'truck' | 'bus' | 'other';
 export type LicenseStatus = 'valid' | 'expired' | 'pending' | 'suspended';
 
 export type Protocol = 'jt808' | 'sim' | 'other';
-export type DeviceSource = 'simulator' | 'jt808';
+export type DeviceSource = 'simulator' | 'browser' | 'jt808';
 export type ConnectionStatus = 'waiting' | 'connected' | 'stale' | 'authentication_error' | 'unknown_device' | 'unavailable';
 
 export interface Vehicle {
@@ -135,4 +135,77 @@ export interface RecordingOut {
 export interface User {
   id: number;
   username: string;
+}
+
+export type TrackingPageState =
+  | 'NOT_STARTED'
+  | 'STARTING'
+  | 'TRACKING'
+  | 'OFFLINE'
+  | 'PAUSED'
+  | 'COMPLETED'
+  | 'PERMISSION_DENIED';
+
+export type TrackingSessionStatus =
+  | 'CREATED'
+  | 'WAITING_FOR_DRIVER'
+  | 'ACTIVE'
+  | 'PAUSED'
+  | 'OFFLINE'
+  | 'COMPLETED'
+  | 'EXPIRED'
+  | 'REVOKED'
+  | 'PERMISSION_DENIED';
+
+export interface TrackingSession {
+  id?: string;
+  session_id?: string;
+  token?: string;
+  status: TrackingSessionStatus | string;
+  vehicle_id?: number | string | null;
+  vehicle_code?: string | null;
+  registration_no?: string | null;
+  vehicle_label?: string | null;
+  driver_name?: string | null;
+  trip_id?: string | number | null;
+  trip_name?: string | null;
+  origin?: string | null;
+  destination?: string | null;
+  starts_at?: string | null;
+  expires_at?: string | null;
+  revoked_at?: string | null;
+  completed_at?: string | null;
+  last_seen_at?: string | null;
+}
+
+export interface TrackingLocationPayload {
+  session_token: string;
+  installation_id: string;
+  sequence: number;
+  latitude: number;
+  longitude: number;
+  accuracy: number | null;
+  speed: number | null;
+  heading: number | null;
+  altitude: number | null;
+  captured_at: string;
+}
+
+export interface TrackingHeartbeatPayload {
+  session_token: string;
+  installation_id: string;
+  last_sequence: number;
+  sent_at: string;
+}
+
+export interface TrackingPermissionDeniedPayload {
+  session_token: string;
+  installation_id: string;
+  reason: string;
+  denied_at: string;
+}
+
+export interface TrackingUploadResponse {
+  accepted?: boolean;
+  status?: TrackingSessionStatus | string;
 }

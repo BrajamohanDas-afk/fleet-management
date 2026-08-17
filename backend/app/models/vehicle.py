@@ -4,6 +4,7 @@ from datetime import date, datetime
 
 if TYPE_CHECKING:
     from app.models.device import Device
+    from app.models.tracking import Trip
     from app.models.vehicle_latest import VehicleLatest
 
 
@@ -58,6 +59,11 @@ class Vehicle(Base):
     )
     devices: Mapped[list["Device"]] = relationship(
         "Device",
+        back_populates="vehicle",
+        cascade="all, delete-orphan",
+    )
+    trips: Mapped[list["Trip"]] = relationship(
+        "Trip",
         back_populates="vehicle",
         cascade="all, delete-orphan",
     )

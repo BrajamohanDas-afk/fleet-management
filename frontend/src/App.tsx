@@ -9,6 +9,7 @@ import Login from './pages/Login';
 import { getToken } from './services/auth';
 import { ThemeProvider } from './contexts/ThemeContext';
 import PublicShare from './pages/PublicShare';
+import PublicTracking from './pages/PublicTracking';
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   if (!getToken()) {
@@ -22,6 +23,7 @@ export default function App() {
     <ThemeProvider>
       <Routes>
         <Route path="/share/:token" element={<PublicShare />} />
+        <Route path="/t/:token" element={<PublicTracking />} />
         <Route
           path="/dashboard/vehicles"
           element={

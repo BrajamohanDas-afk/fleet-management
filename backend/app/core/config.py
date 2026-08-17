@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     MEDIAMTX_API_PORT: int = 8889
     DEV_DEVICE_KEY: str = "dev-device-key"
     PUBLIC_SHARE_BASE_URL: str = "http://localhost:5173"
+    TRACKING_PUBLIC_BASE_URL: str = "http://localhost:5173"
+    TRACKING_DEFAULT_DURATION_MINUTES: int = 24 * 60
+    TRACKING_MAX_FUTURE_SECONDS: int = 120
+    TRACKING_MAX_SPEED_KMH: float = 180.0
 
 
 settings = Settings()
