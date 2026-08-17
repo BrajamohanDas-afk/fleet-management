@@ -57,6 +57,8 @@ username: admin
 password: admin
 ```
 
+For same-network hosting from a Windows VM, see [WINDOWS_VM_HOSTING.md](WINDOWS_VM_HOSTING.md).
+
 ## Services And Ports
 
 | Service | URL / Port | Purpose |

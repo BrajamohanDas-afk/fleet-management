@@ -93,19 +93,19 @@ services:
       SECRET_KEY: dev-secret-change-me
       ENV: dev
       MEDIAMTX_HOST: mediamtx
-      MEDIAMTX_PUBLIC_HOST: localhost
+      MEDIAMTX_PUBLIC_HOST: 172.17.104.142
       MEDIAMTX_RTSP_PORT: "8554"
       MEDIAMTX_HTTP_PORT: "8890"
       MEDIAMTX_API_PORT: "8889"
       DEV_DEVICE_KEY: dev-device-key
       TRACCAR_URL: http://traccar:8082
-      TRACCAR_PUBLIC_URL: http://localhost:8082
-      TRACCAR_CLIENT_PUBLIC_URL: http://localhost:5055
+      TRACCAR_PUBLIC_URL: http://172.17.104.142:8082
+      TRACCAR_CLIENT_PUBLIC_URL: http://172.17.104.142:5055
       TRACCAR_USERNAME: ${TRACCAR_USERNAME:-admin}
       TRACCAR_PASSWORD: ${TRACCAR_PASSWORD:-admin}
       TRACCAR_SYNC_INTERVAL_SECONDS: "10"
       TRACCAR_STALE_SECONDS: "90"
-      PUBLIC_SHARE_BASE_URL: http://localhost:5173
+      PUBLIC_SHARE_BASE_URL: http://172.17.104.142:5173
     depends_on:
       db:
         condition: service_healthy
@@ -129,7 +129,7 @@ services:
     ports:
       - "5173:5173"
     environment:
-      VITE_API_URL: http://localhost:8000/api
+      VITE_API_URL: http://172.17.104.142:8000/api
     depends_on:
       api:
         condition: service_started
@@ -138,25 +138,6 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
-
-  simulator:
-    build:
-      context: ./simulator
-      dockerfile: Dockerfile
-    container_name: fleet-simulator
-    depends_on:
-      api:
-        condition: service_started
-      mediamtx:
-        condition: service_started
-    networks:
-      - fleet-net
-    # Webcam passthrough is platform-dependent. On Linux hosts with a V4L2
-    # device, uncomment the lines below to expose /dev/video0 to the container.
-    # The simulator automatically falls back to a generated test pattern when
-    # no webcam is available, so this block is optional.
-    # devices:
-    #   - /dev/video0:/dev/video0
 
   protocol-layer:
     build:

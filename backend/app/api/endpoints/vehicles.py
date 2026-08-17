@@ -100,6 +100,29 @@ async def _ensure_vehicle_latest(db: AsyncSession, vehicle_id: int, device_id: i
         latest.device_id = device_id
 
 
+async def _device_out(db: AsyncSession, device: Device) -> DeviceOut:
+    result = await db.execute(
+        select(DeviceChannel)
+        .where(DeviceChannel.device_id == device.id)
+        .order_by(DeviceChannel.channel_no)
+    )
+    channels = result.scalars().all()
+    return DeviceOut(
+        id=device.id,
+        vehicle_id=device.vehicle_id,
+        device_serial=device.device_serial,
+        sim_number=device.sim_number,
+        protocol=device.protocol,
+        last_seen_at=device.last_seen_at,
+        source=device.source,
+        external_device_id=device.external_device_id,
+        external_device_identifier=device.external_device_identifier,
+        connection_status=device.connection_status,
+        last_external_sync_at=device.last_external_sync_at,
+        channels=channels,
+    )
+
+
 async def _sync_device_channels(
     db: AsyncSession,
     *,
@@ -292,7 +315,7 @@ async def create_vehicle_device(
     data.update({"vehicle_id": vehicle_id, "protocol": payload.protocol, "source": payload.source})
     device = await device_repository.create(db, data)
     await db.commit()
-    return DeviceOut.model_validate(device)
+    return await _device_out(db, device)
 
 
 @router.get("/{vehicle_id}/devices", response_model=list[DeviceOut])
@@ -304,7 +327,10 @@ async def list_vehicle_devices(
     _ = current_user
     if await vehicle_repository.get(db, vehicle_id) is None:
         raise HTTPException(status_code=404, detail="Vehicle not found")
-    return [DeviceOut.model_validate(device) for device in await device_repository.get_by_vehicle(db, vehicle_id)]
+    return [
+        await _device_out(db, device)
+        for device in await device_repository.get_by_vehicle(db, vehicle_id)
+    ]
 
 
 @router.get("", response_model=list[VehicleWithLatest])
