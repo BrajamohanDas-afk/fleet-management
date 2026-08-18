@@ -61,11 +61,7 @@ export default function MapView({
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const validPositions = useMemo(
-    () =>
-      positions.filter(
-        (position) =>
-          position.latitude != null && position.longitude != null
-      ),
+    () => positions.filter((position) => position.latitude != null && position.longitude != null),
     [positions]
   );
 
@@ -102,20 +98,12 @@ export default function MapView({
     if (validPositions.length === 1) {
       const coordinate = getPositionCoordinate(validPositions[0]);
       if (coordinate) {
-        map.easeTo({
-          center: toLngLat(coordinate),
-          zoom: MAP_DEFAULT_ZOOM,
-          duration: 400,
-        });
+        map.easeTo({ center: toLngLat(coordinate), zoom: MAP_DEFAULT_ZOOM, duration: 400 });
       }
     } else {
       const bounds = buildBounds(validPositions);
       if (bounds) {
-        map.fitBounds(bounds, {
-          padding: 40,
-          maxZoom: MAP_FOCUS_ZOOM,
-          duration: 400,
-        });
+        map.fitBounds(bounds, { padding: 48, maxZoom: MAP_FOCUS_ZOOM, duration: 400 });
       }
     }
 
@@ -124,26 +112,24 @@ export default function MapView({
 
   useEffect(() => {
     if (!map || !focusTarget) return;
-    map.easeTo({
-      center: toLngLat(focusTarget),
-      zoom: Math.max(map.getZoom(), MAP_FOCUS_ZOOM),
-      duration: 400,
-    });
+    map.easeTo({ center: toLngLat(focusTarget), zoom: Math.max(map.getZoom(), MAP_FOCUS_ZOOM), duration: 450 });
   }, [focusTarget, map]);
 
   return (
-    <div
-      className="relative h-full w-full overflow-hidden rounded-xl bg-white shadow-sm"
-      data-testid="fleet-map-container"
-    >
+    <div className="app-card app-animate-in relative h-full min-h-[31rem] w-full overflow-hidden" data-testid="fleet-map-container">
       <div ref={mapElementRef} className="h-full w-full" data-testid="fleet-map" />
+
+      <div className="app-chip pointer-events-none absolute left-4 top-4 bg-white/90 backdrop-blur">
+        {validPositions.length} tracked
+      </div>
+
       {loadError && (
-        <div className="absolute left-4 top-4 max-w-sm rounded-md border border-red-200 bg-white px-3 py-2 text-sm text-red-700 shadow-sm">
+        <div className="absolute left-4 top-16 max-w-sm rounded-lg border px-3 py-2 text-sm" style={{ backgroundColor: 'var(--danger-50)', borderColor: 'var(--danger-100)', color: 'var(--danger-text)' }}>
           {loadError}
         </div>
       )}
       {!map && (
-        <div className="absolute inset-0 flex items-center justify-center bg-white text-sm text-slate-500">
+        <div className="absolute inset-0 flex items-center justify-center text-sm" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
           Loading map...
         </div>
       )}

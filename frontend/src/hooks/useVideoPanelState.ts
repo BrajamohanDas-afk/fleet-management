@@ -22,10 +22,10 @@ type Action =
   | { type: 'START' }
   | { type: 'STOP' }
   | { type: 'RETRY' }
-  | { type: 'HEALTH'; payload: DeviceHealth | null }
+  | { type: 'HEALTH'; payload: DeviceHealth | null; keepReconnecting: boolean }
   | { type: 'STREAM_READY' }
   | { type: 'STREAM_ERROR' }
-  | { type: 'RECONNECT_TICK' }
+  | { type: 'RECONNECT_TICK'; keepReconnecting: boolean }
   | { type: 'REGISTER'; registered: boolean };
 
 const DEGRADED_AGE_MS = 5_000;
@@ -37,16 +37,19 @@ const MAX_BACKOFF_MS = 15_000;
 function computeStateFromHealth(
   current: PanelState,
   health: DeviceHealth | null,
-  lastFrameAt: Date | null
+  lastFrameAt: Date | null,
+  keepReconnecting: boolean
 ): PanelState {
   if (current === 'idle') return current;
 
   if (!health) {
-    if (current === 'offline') return current;
+    if (current === 'offline' && !keepReconnecting) return current;
     return 'reconnecting';
   }
 
-  if (health.state === 'offline') return 'offline';
+  if (health.state === 'offline') {
+    return keepReconnecting ? 'reconnecting' : 'offline';
+  }
 
   if (health.state === 'live' || health.state === 'connecting') {
     if (current === 'connecting' || current === 'reconnecting') return current;
@@ -102,7 +105,7 @@ function reducer(state: State, action: Action): State {
       return state;
     }
     case 'STREAM_ERROR': {
-      if (state.state === 'connecting') {
+      if (state.state === 'connecting' || state.state === 'live' || state.state === 'degraded') {
         return { ...state, state: 'reconnecting' };
       }
       return state;
@@ -115,13 +118,14 @@ function reducer(state: State, action: Action): State {
       const nextState = computeStateFromHealth(
         state.state,
         health,
-        lastFrameAt
+        lastFrameAt,
+        action.keepReconnecting
       );
       return { ...state, state: nextState, lastFrameAt };
     }
     case 'RECONNECT_TICK': {
       if (state.state !== 'reconnecting') return state;
-      if (state.attemptCount >= MAX_RECONNECT_ATTEMPTS) {
+      if (!action.keepReconnecting && state.attemptCount >= MAX_RECONNECT_ATTEMPTS) {
         return { ...state, state: 'offline' };
       }
       return {
@@ -144,6 +148,10 @@ function reconnectDelayMs(attemptCount: number): number {
   return Math.min(exponential, MAX_BACKOFF_MS);
 }
 
+interface UseVideoPanelStateOptions {
+  keepReconnecting?: boolean;
+}
+
 export interface UseVideoPanelStateReturn {
   state: PanelState;
   isRegistered: boolean;
@@ -157,7 +165,7 @@ export interface UseVideoPanelStateReturn {
   onStreamError: () => void;
 }
 
-export function useVideoPanelState(): UseVideoPanelStateReturn {
+export function useVideoPanelState({ keepReconnecting = false }: UseVideoPanelStateOptions = {}): UseVideoPanelStateReturn {
   const id = useId();
   const { registerPanel, unregisterPanel } = useVideoPanelContext();
   const [state, dispatch] = useReducer(reducer, {
@@ -182,6 +190,11 @@ export function useVideoPanelState(): UseVideoPanelStateReturn {
   }, [id, registerPanel, unregisterPanel]);
 
   useEffect(() => {
+    if (!keepReconnecting || state.state !== 'offline') return;
+    dispatch({ type: 'RETRY' });
+  }, [keepReconnecting, state.state]);
+
+  useEffect(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
@@ -190,16 +203,16 @@ export function useVideoPanelState(): UseVideoPanelStateReturn {
 
     const delay = reconnectDelayMs(state.attemptCount);
     timeoutRef.current = setTimeout(() => {
-      dispatch({ type: 'RECONNECT_TICK' });
+      dispatch({ type: 'RECONNECT_TICK', keepReconnecting });
     }, delay);
-  }, [state.state, state.attemptCount, state.connectionKey]);
+  }, [state.state, state.attemptCount, state.connectionKey, keepReconnecting]);
 
   const start = useCallback(() => dispatch({ type: 'START' }), []);
   const stop = useCallback(() => dispatch({ type: 'STOP' }), []);
   const retry = useCallback(() => dispatch({ type: 'RETRY' }), []);
   const updateHealth = useCallback(
-    (health: DeviceHealth | null) => dispatch({ type: 'HEALTH', payload: health }),
-    []
+    (health: DeviceHealth | null) => dispatch({ type: 'HEALTH', payload: health, keepReconnecting }),
+    [keepReconnecting]
   );
   const onStreamReady = useCallback(
     () => dispatch({ type: 'STREAM_READY' }),

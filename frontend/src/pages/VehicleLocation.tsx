@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Radio, Search, Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Radio, Search } from 'lucide-react';
 import { useFleetPositions } from '../hooks/useFleetPositions';
 import { useAllVehicles } from '../hooks/useAllVehicles';
 import CounterBand, { countByStatus } from '../components/location/CounterBand';
@@ -15,6 +15,8 @@ const STATUS_FILTER_OPTIONS: { value: VehicleStatus | ''; label: string }[] = [
   { value: '', label: 'All' },
   { value: 'moving', label: 'Running' },
   { value: 'standing', label: 'Stationary' },
+  { value: 'stale', label: 'Stale' },
+  { value: 'offline', label: 'Offline' },
 ];
 
 function needsRenewal(vehicle: VehicleOut): boolean {
@@ -24,10 +26,7 @@ function needsRenewal(vehicle: VehicleOut): boolean {
   return expiry - Date.now() <= THIRTY_DAYS_MS;
 }
 
-function enrichPositions(
-  positions: FleetPosition[],
-  vehicles: VehicleOut[]
-): FleetPosition[] {
+function enrichPositions(positions: FleetPosition[], vehicles: VehicleOut[]): FleetPosition[] {
   const vehicleMap = new Map(vehicles.map((vehicle) => [vehicle.id, vehicle]));
   return positions.map((position) => {
     const vehicle = vehicleMap.get(position.vehicle_id);
@@ -49,24 +48,22 @@ export default function VehicleLocation() {
   const [statusFilter, setStatusFilter] = useState<VehicleStatus | ''>('');
   const [showLabels, setShowLabels] = useState(false);
   const [focusTarget, setFocusTarget] = useState<MapCoordinate | null>(null);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<number | null>(null);
 
-  const positions = useMemo(
-    () => enrichPositions(rawPositions, allVehicles),
-    [rawPositions, allVehicles]
-  );
+  const positions = useMemo(() => enrichPositions(rawPositions, allVehicles), [rawPositions, allVehicles]);
 
   const filteredPositions = useMemo(() => {
     const q = search.trim().toLowerCase();
     return positions.filter((position) => {
-      const matchesSearch =
-        !q ||
-        position.registration_no.toLowerCase().includes(q) ||
-        position.vehicle_code.toLowerCase().includes(q);
-      const matchesStatus =
-        !statusFilter || position.status === statusFilter;
+      const matchesSearch = !q || position.registration_no.toLowerCase().includes(q) || position.vehicle_code.toLowerCase().includes(q);
+      const matchesStatus = !statusFilter || position.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
   }, [positions, search, statusFilter]);
+
+  const selectedPosition = useMemo(() => {
+    return filteredPositions.find((position) => position.vehicle_id === selectedVehicleId) ?? filteredPositions[0] ?? null;
+  }, [filteredPositions, selectedVehicleId]);
 
   const counters = useMemo(() => {
     return {
@@ -77,48 +74,32 @@ export default function VehicleLocation() {
     };
   }, [filteredPositions, allVehicles]);
 
+  const handleSelect = (position: FleetPosition) => {
+    setSelectedVehicleId(position.vehicle_id);
+  };
+
   const handleTrack = (position: FleetPosition) => {
+    setSelectedVehicleId(position.vehicle_id);
     if (position.latitude == null || position.longitude == null) return;
     setFocusTarget([position.latitude, position.longitude]);
   };
 
   return (
-    <div className="flex h-screen flex-col bg-slate-50">
-      {/* Header + counters */}
-      <div className="shrink-0 space-y-4 p-4">
-        <div className="flex flex-col gap-3 rounded-xl bg-white p-4 shadow-sm md:flex-row md:items-center md:justify-between">
+    <div className="app-page app-animate-in flex flex-col">
+      <div className="space-y-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">
-              Vehicle Location
-            </h1>
-            <p className="text-sm text-slate-500">
-              Live fleet map and tracking
-            </p>
+            <p className="app-kicker mb-2">Live tracking</p>
+            <h1 className="app-title">Vehicle Location</h1>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div
-              className={[
-                'flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium',
-                isConnected
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : 'bg-slate-100 text-slate-600',
-              ].join(' ')}
-              title={
-                isConnected
-                  ? 'Live position feed connected'
-                  : 'Live position feed disconnected'
-              }
-            >
-              <span
-                className={[
-                  'h-2 w-2 rounded-full',
-                  isConnected ? 'bg-emerald-500' : 'bg-slate-400',
-                ].join(' ')}
-              />
-              <Radio className="h-4 w-4" />
-              {isConnected ? 'Live Feed' : 'Feed Offline'}
-            </div>
+          <div
+            className={`app-chip ${isConnected ? 'status-moving' : 'status-offline'}`}
+            title={isConnected ? 'Live position feed connected' : 'Live position feed disconnected'}
+          >
+            <span className={`app-status-dot ${isConnected ? 'app-live-dot dot-moving' : 'dot-offline'}`} />
+            <Radio className="h-4 w-4" />
+            {isConnected ? 'Live Feed' : 'Feed Offline'}
           </div>
         </div>
 
@@ -130,101 +111,70 @@ export default function VehicleLocation() {
         />
       </div>
 
-      {/* Main content: rail + map */}
-      <div className="flex min-h-0 flex-1 gap-4 px-4 pb-4">
-        {/* Left rail */}
-        <aside className="flex w-80 shrink-0 flex-col gap-4 overflow-hidden rounded-xl bg-white p-4 shadow-sm">
-          <div className="space-y-4">
-            {/* Search */}
+      <div className="mt-4 grid min-h-[42rem] flex-1 grid-cols-1 gap-4 xl:grid-cols-[21rem_minmax(0,1fr)]">
+        <aside className="app-card flex min-h-[34rem] flex-col overflow-hidden p-4">
+          <div className="mb-4 space-y-3">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: 'var(--text-tertiary)' }} />
               <input
                 type="text"
                 placeholder="Search plate or code"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm text-slate-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                className="app-input w-full pl-9"
               />
             </div>
 
-            {/* Status radio filters */}
-            <div>
-              <p className="mb-2 text-sm font-medium text-slate-700">
-                Status
-              </p>
-              <div className="flex flex-col gap-2">
-                {STATUS_FILTER_OPTIONS.map((option) => {
-                  const active = statusFilter === option.value;
-                  return (
-                    <label
-                      key={option.value || 'all'}
-                      className={[
-                        'flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors',
-                        active
-                          ? 'border-primary-500 bg-primary-50 text-primary-700'
-                          : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
-                      ].join(' ')}
-                    >
-                      <input
-                        type="radio"
-                        name="status-filter"
-                        value={option.value}
-                        checked={active}
-                        onChange={() => setStatusFilter(option.value)}
-                        className="h-4 w-4 text-primary-600 focus:ring-primary-500"
-                      />
-                      {option.label}
-                    </label>
-                  );
-                })}
-              </div>
+            <div className="flex flex-wrap gap-2">
+              {STATUS_FILTER_OPTIONS.map((option) => {
+                const active = statusFilter === option.value;
+                return (
+                  <button
+                    key={option.value || 'all'}
+                    type="button"
+                    onClick={() => setStatusFilter(option.value)}
+                    className={`app-chip ${active ? 'app-chip-active' : ''}`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
             </div>
 
-            {/* Show labels toggle */}
             <button
               type="button"
               onClick={() => setShowLabels((prev) => !prev)}
-              className={[
-                'flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
-                showLabels
-                  ? 'border-primary-500 bg-primary-50 text-primary-700'
-                  : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50',
-              ].join(' ')}
+              className={`app-button w-full ${showLabels ? 'app-button-primary' : 'app-button-secondary'}`}
             >
-              {showLabels ? (
-                <Eye className="h-4 w-4" />
-              ) : (
-                <EyeOff className="h-4 w-4" />
-              )}
-              Show Popup Labels
+              {showLabels ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+              Popup Labels
             </button>
           </div>
 
-          {/* Cards */}
           <div className="min-h-0 flex-1 overflow-y-auto pr-1">
             {isLoading && filteredPositions.length === 0 && (
-              <p className="py-4 text-center text-sm text-slate-500">
-                Loading vehicles…
-              </p>
+              <p className="py-4 text-center text-sm" style={{ color: 'var(--text-secondary)' }}>Loading vehicles...</p>
             )}
             {error && (
-              <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
+              <p className="app-card mb-3 p-3 text-sm" style={{ backgroundColor: 'var(--danger-50)', color: 'var(--danger-text)' }}>
                 Failed to load positions: {error.message}
               </p>
             )}
             <VehicleCardRail
               positions={filteredPositions}
+              selectedVehicleId={selectedPosition?.vehicle_id ?? null}
+              onSelect={handleSelect}
               onTrack={handleTrack}
             />
           </div>
         </aside>
 
-        {/* Map */}
-        <main className="min-h-0 flex-1">
+        <main className="min-h-[34rem]">
           <MapView
             positions={filteredPositions}
             showPermanentLabels={showLabels}
             focusTarget={focusTarget}
+            onSelectVehicle={handleSelect}
           />
         </main>
       </div>

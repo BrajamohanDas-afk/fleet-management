@@ -161,6 +161,8 @@ async def start_device_recording(
         channel_no=payload.channel_no,
         duration_s=payload.duration_s,
     )
+    await db.commit()
+    await db.refresh(clip)
 
     background_tasks.add_task(
         _record_and_finalize,

@@ -33,7 +33,7 @@ async def get_tracking_session(
     redis: Redis = Depends(get_redis),
 ) -> TrackingSessionSummaryOut:
     session = await load_public_session(db, token)
-    vehicle = session.trip.vehicle if session.trip is not None else session.vehicle
+    vehicle = session.trip.vehicle if session.trip is not None else None
     if vehicle is None:
         raise HTTPException(status_code=404, detail="Vehicle not found")
 

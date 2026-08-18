@@ -1,7 +1,8 @@
+import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bike, Bus, Car, HelpCircle, Link, Navigation, Truck, Trash2 } from 'lucide-react';
+import { Bike, Bus, Camera, Car, Edit3, Gauge, HelpCircle, Navigation, ShieldCheck, Smartphone, Trash2, Truck } from 'lucide-react';
 import type { VehicleOut } from '../../services/vehicles';
-import type { VehicleStatus, LicenseStatus, VehicleType } from '../../types';
+import type { LicenseStatus, VehicleStatus, VehicleType } from '../../types';
 
 const VEHICLE_TYPE_ICONS: Record<VehicleType, typeof Car> = {
   bike: Bike,
@@ -18,47 +19,58 @@ const STATUS_LABELS: Record<VehicleStatus, string> = {
   offline: 'Offline',
 };
 
-const STATUS_COLORS: Record<VehicleStatus, string> = {
-  moving: 'bg-emerald-100 text-emerald-800',
-  standing: 'bg-blue-100 text-blue-800',
-  stale: 'bg-amber-100 text-amber-800',
-  offline: 'bg-slate-100 text-slate-800',
+const STATUS_CLASS: Record<VehicleStatus, string> = {
+  moving: 'status-moving',
+  standing: 'status-standing',
+  stale: 'status-stale',
+  offline: 'status-offline',
 };
 
-const LICENSE_COLORS: Record<LicenseStatus, string> = {
-  valid: 'bg-emerald-100 text-emerald-800',
-  expired: 'bg-red-100 text-red-800',
-  pending: 'bg-amber-100 text-amber-800',
-  suspended: 'bg-purple-100 text-purple-800',
+const STATUS_DOT_CLASS: Record<VehicleStatus, string> = {
+  moving: 'dot-moving',
+  standing: 'dot-standing',
+  stale: 'dot-stale',
+  offline: 'dot-offline',
+};
+
+const LICENSE_CLASS: Record<LicenseStatus, string> = {
+  valid: 'status-moving',
+  expired: 'border-red-100 bg-red-50 text-red-700',
+  pending: 'status-stale',
+  suspended: 'status-offline',
 };
 
 interface VehicleCardProps {
   vehicle: VehicleOut;
   onEdit: (vehicle: VehicleOut) => void;
-  onDelete: (id: number) => void;
-  onShare: (vehicle: VehicleOut) => void;
+  onRequestDelete: (vehicle: VehicleOut) => void;
   onTrack: (vehicle: VehicleOut) => void;
+}
+
+function Field({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+  return (
+    <div className="app-muted-tile p-3">
+      <p className="app-label mb-1 flex items-center gap-1.5">
+        {icon}
+        {label}
+      </p>
+      <p className="app-value truncate text-sm">{value}</p>
+    </div>
+  );
 }
 
 export default function VehicleCard({
   vehicle,
   onEdit,
-  onDelete,
-  onShare,
+  onRequestDelete,
   onTrack,
 }: VehicleCardProps) {
   const navigate = useNavigate();
   const TypeIcon = VEHICLE_TYPE_ICONS[vehicle.vehicle_type];
   const status = vehicle.latest?.status ?? 'offline';
 
-  const deviceCode =
-    vehicle.device_serial?.trim() ||
-    vehicle.latest?.device_serial?.trim() ||
-    '--';
-  const simNumber =
-    vehicle.sim_number?.trim() ||
-    vehicle.latest?.sim_number?.trim() ||
-    '--';
+  const deviceCode = vehicle.device_serial?.trim() || vehicle.latest?.device_serial?.trim() || '--';
+  const simNumber = vehicle.sim_number?.trim() || vehicle.latest?.sim_number?.trim() || '--';
   const hasDevice = Boolean(vehicle.device_id ?? vehicle.latest?.device_id);
 
   const handleOverview = () => {
@@ -66,112 +78,66 @@ export default function VehicleCard({
   };
 
   return (
-    <div className="rounded-xl p-5 shadow-sm transition-shadow hover:shadow-md" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-primary)' }}>
-      <div className="mb-4 flex items-start justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg" style={{ backgroundColor: 'var(--accent-50)', color: 'var(--accent-600)' }}>
-            <TypeIcon className="h-6 w-6" />
+    <article className="app-card app-hover-lift p-4 transition-colors hover:border-blue-300">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="app-icon-box relative">
+            <TypeIcon className="h-5 w-5" />
+            <span className={`absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white ${STATUS_DOT_CLASS[status]}`} />
           </div>
-          <div>
-            <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+          <div className="min-w-0">
+            <h3 className="truncate text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
               {vehicle.registration_no}
             </h3>
-            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{vehicle.vehicle_code}</p>
+            <p className="truncate text-sm" style={{ color: 'var(--text-secondary)' }}>{vehicle.vehicle_code}</p>
           </div>
         </div>
-        <span
-          className={[
-            'rounded-full px-2.5 py-0.5 text-xs font-semibold',
-            STATUS_COLORS[status],
-          ].join(' ')}
-        >
-          {STATUS_LABELS[status]}
-        </span>
+        <span className={`app-chip ${STATUS_CLASS[status]}`}>{STATUS_LABELS[status]}</span>
       </div>
 
-      <div className="mb-4 grid grid-cols-2 gap-y-3 text-sm">
-        <div>
-          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Device code</p>
-          <p className="font-medium" style={{ color: 'var(--text-primary)' }}>{deviceCode}</p>
-        </div>
-        <div>
-          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>SIM</p>
-          <p className="font-medium" style={{ color: 'var(--text-primary)' }}>{simNumber}</p>
-        </div>
-        <div>
-          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Speed limit</p>
-          <p className="font-medium" style={{ color: 'var(--text-primary)' }}>
-            {vehicle.speed_limit_kmh !== null
-              ? `${vehicle.speed_limit_kmh} km/h`
-              : '--'}
+      <div className="mb-4 grid grid-cols-2 gap-2">
+        <Field icon={<Camera className="h-3.5 w-3.5" />} label="Device" value={deviceCode} />
+        <Field icon={<Smartphone className="h-3.5 w-3.5" />} label="SIM" value={simNumber} />
+        <Field icon={<Gauge className="h-3.5 w-3.5" />} label="Speed limit" value={vehicle.speed_limit_kmh !== null ? `${vehicle.speed_limit_kmh} km/h` : '--'} />
+        <div className="app-muted-tile p-3">
+          <p className="app-label mb-1 flex items-center gap-1.5">
+            <ShieldCheck className="h-3.5 w-3.5" /> License
           </p>
-        </div>
-        <div>
-          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>License</p>
-          <span
-            className={[
-              'inline-block rounded-full px-2 py-0.5 text-xs font-semibold',
-              LICENSE_COLORS[vehicle.license_status],
-            ].join(' ')}
-          >
+          <span className={`app-chip max-w-full ${LICENSE_CLASS[vehicle.license_status]}`}>
             {vehicle.license_status}
           </span>
         </div>
       </div>
 
-      <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
-        <span className="rounded-full bg-slate-100 px-2 py-1">
-          Device status: {hasDevice ? 'Registered' : 'Not connected'}
+      <div className="mb-4 flex items-center justify-between gap-3 app-muted-tile px-3 py-2">
+        <span className="app-label">Device status</span>
+        <span className="truncate text-sm font-medium" style={{ color: hasDevice ? 'var(--success-800)' : 'var(--text-secondary)' }}>
+          {hasDevice ? 'Registered' : 'Not connected'}
         </span>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={handleOverview}
-          className="flex-1 rounded-lg px-3 py-2 text-sm font-medium hover:opacity-80"
-          style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
-        >
+
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" onClick={handleOverview} className="app-button app-button-muted">
+          <Camera className="h-4 w-4" />
           Overview
         </button>
-        <button
-          type="button"
-          onClick={() => onEdit(vehicle)}
-          className="flex-1 rounded-lg px-3 py-2 text-sm font-medium hover:opacity-80"
-          style={{ backgroundColor: 'var(--accent-600)', color: 'var(--text-inverse)' }}
-        >
+        <button type="button" onClick={() => onEdit(vehicle)} className="app-button app-button-primary">
+          <Edit3 className="h-4 w-4" />
           Edit
+        </button>
+        <button type="button" onClick={() => onTrack(vehicle)} className="app-button app-button-secondary col-span-2">
+          <Navigation className="h-4 w-4" />
+          Track
         </button>
         <button
           type="button"
-          onClick={() => {
-            if (window.confirm('Are you sure you want to delete this vehicle?')) {
-              onDelete(vehicle.id);
-            }
-          }}
-          className="flex flex-1 items-center justify-center gap-1 rounded-lg px-3 py-2 text-sm font-medium hover:opacity-80"
-          style={{ backgroundColor: 'var(--danger-50)', color: 'var(--danger-text)' }}
+          onClick={() => onRequestDelete(vehicle)}
+          className="app-button app-button-danger col-span-2"
         >
           <Trash2 className="h-4 w-4" />
           Delete
         </button>
-        <button
-          type="button"
-          onClick={() => onShare(vehicle)}
-          className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
-          <Link className="h-4 w-4" />
-          Share
-        </button>
-        <button
-          type="button"
-          onClick={() => onTrack(vehicle)}
-          className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-sm font-medium text-primary-700 hover:bg-primary-100"
-        >
-          <Navigation className="h-4 w-4" />
-          Track
-        </button>
       </div>
-    </div>
+    </article>
   );
 }
-

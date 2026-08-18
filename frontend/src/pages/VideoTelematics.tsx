@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import type { LatLngExpression } from 'leaflet';
+import { Activity, Camera, Clock, Gauge, LayoutGrid, MapPinned, Radio, Satellite, Video as VideoIcon } from 'lucide-react';
 import { useAllVehicles } from '../hooks/useAllVehicles';
 import { useVideoChannels } from '../hooks/useVideoChannels';
 import { startStreams } from '../services/video';
@@ -16,6 +17,7 @@ import type { DeviceChannelOut, DeviceHealth, VehicleStatus } from '../types';
 type LayoutMode = 'side-by-side' | 'front-focus' | 'rear-focus';
 
 const STREAM_READY_WAIT_MS = 1_500;
+const STREAM_KEEPALIVE_INTERVAL_MS = 15_000;
 
 const LAYOUT_OPTIONS: { value: LayoutMode; label: string }[] = [
   { value: 'side-by-side', label: 'Side-by-side' },
@@ -137,7 +139,7 @@ export default function VideoTelematics() {
     }));
   }, [channels, health]);
 
-  const handleVehicleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleVehicleChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const id = Number(event.target.value);
     setSelectedVehicleId(id);
     setIsStreaming(false);
@@ -181,12 +183,7 @@ export default function VideoTelematics() {
     }
 
     try {
-      const result = await startStreams(deviceId);
-      const hasRtspSources = currentChannels.some((channel) => channel.rtsp_url);
-      if (hasRtspSources && result.started === 0) {
-        setStreamError('Camera channels exist, but no RTSP relays were started. Re-save the camera RTSP URLs and try again.');
-        return;
-      }
+      await startStreams(deviceId);
       await waitForStreamReady(STREAM_READY_WAIT_MS);
       await refetchVideoChannels();
       setIsStreaming(true);
@@ -195,7 +192,34 @@ export default function VideoTelematics() {
       setStreamError('Failed to request camera relays. Check the API, Redis, protocol-layer, and MediaMTX services.');
     }
   };
-  const handleStopCameras = () => setIsStreaming(false);
+  const handleStopCameras = () => {
+    setIsStreaming(false);
+    setStreamError(null);
+  };
+
+  useEffect(() => {
+    if (!isStreaming || !deviceId) return;
+
+    let cancelled = false;
+    const refreshRelays = async () => {
+      try {
+        await startStreams(deviceId);
+        if (!cancelled) await refetchVideoChannels();
+      } catch {
+        // Active panels keep retrying; transient relay refresh failures should not stop the view.
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      void refreshRelays();
+    }, STREAM_KEEPALIVE_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [deviceId, isStreaming, refetchVideoChannels]);
+
   const handleReconnectView = () => setReconnectSignal((prev) => prev + 1);
   const handleSaveVideo = () => setIsSaveModalOpen(true);
   const handleSavedVideos = () => setIsRecordingsModalOpen(true);
@@ -246,24 +270,24 @@ export default function VideoTelematics() {
     : [];
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl space-y-7">
-        <div className="flex flex-col gap-5 rounded-2xl bg-white p-5 shadow-sm md:flex-row md:items-start md:justify-between">
+    <div className="app-page app-animate-in">
+      <div className="app-page-inner space-y-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">
+            <p className="app-kicker mb-2">Camera operations</p>
+            <h1 className="app-title">
               Video Telematics
             </h1>
-            <p className="text-sm text-slate-500">
-              Live camera streams and vehicle telemetry
-            </p>
+
+
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="app-card flex flex-col gap-3 p-3 xl:flex-row xl:items-center">
             <select
               value={selectedVehicleId ?? ''}
               onChange={handleVehicleChange}
               disabled={vehiclesLoading}
-              className="app-select"
+              className="app-select min-w-[12rem]"
             >
               <option value="" disabled>
                 Select vehicle
@@ -275,18 +299,18 @@ export default function VideoTelematics() {
               ))}
             </select>
 
-            <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-1">
+            <div className="inline-flex rounded-lg p-1" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
               {LAYOUT_OPTIONS.map((option) => (
                 <button
                   key={option.value}
                   type="button"
                   onClick={() => handleLayoutChange(option.value)}
-                  className={[
-                    'rounded-md px-3 py-1.5 text-sm font-medium',
-                    layout === option.value
-                      ? 'bg-white text-slate-900 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900',
-                  ].join(' ')}
+                  className="rounded-lg px-3 py-2 text-xs font-semibold transition-colors"
+                  style={{
+                    backgroundColor: layout === option.value ? 'var(--bg-secondary)' : 'transparent',
+                    color: layout === option.value ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    boxShadow: layout === option.value ? 'var(--shadow-sm)' : 'none',
+                  }}
                 >
                   {option.label}
                 </button>
@@ -305,39 +329,28 @@ export default function VideoTelematics() {
         </div>
 
         {vehiclesError && (
-          <div className="rounded-xl bg-red-50 p-4 text-sm text-red-700">
+          <div className="rounded-lg p-4 text-sm font-semibold" style={{ backgroundColor: 'var(--danger-50)', color: 'var(--danger-text)' }}>
             Failed to load vehicles: {vehiclesError.message}
           </div>
         )}
 
-        
         {streamError && (
-          <div className="rounded-xl bg-red-50 p-4 text-sm text-red-700">
+          <div className="rounded-lg p-4 text-sm font-semibold" style={{ backgroundColor: 'var(--danger-50)', color: 'var(--danger-text)' }}>
             {streamError}
           </div>
         )}
 
-        {selectedVehicle && deviceId && configuredCameraCount > 0 && (
-          <div className="flex flex-col gap-3 rounded-xl bg-white p-4 text-sm text-slate-600 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="font-semibold text-slate-900">Camera stream status</p>
-              <p>{configuredCameraCount} configured camera{configuredCameraCount === 1 ? '' : 's'}; showing {visibleCameraCount > 4 ? 4 : visibleCameraCount} panel{visibleCameraCount === 1 ? '' : 's'}.</p>
-            </div>
-            <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-              {isStreaming ? 'Relays requested' : 'Idle'}
-            </div>
-          </div>
-        )}
-
         {selectedVehicle && (
-          <div className="grid grid-cols-2 gap-4 rounded-xl bg-white p-4 shadow-sm md:grid-cols-4">
-            <StatusItem label="Vehicle" value={selectedVehicle.registration_no} />
-            <StatusItem label="Cameras" value={cameraSummary} />
+          <div className="app-stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatusItem icon={<VideoIcon className="h-4 w-4" />} label="Vehicle" value={selectedVehicle.registration_no} />
+            <StatusItem icon={<Camera className="h-4 w-4" />} label="Cameras" value={cameraSummary} />
             <StatusItem
+              icon={<Radio className="h-4 w-4" />}
               label="GPS"
               value={latest?.status ? STATUS_LABELS[latest.status] : '--'}
             />
             <StatusItem
+              icon={<Clock className="h-4 w-4" />}
               label="Last Seen"
               value={formatLastSeen(latest?.received_at)}
             />
@@ -345,25 +358,40 @@ export default function VideoTelematics() {
         )}
 
         {!selectedVehicle && !vehiclesLoading && (
-          <div className="rounded-xl bg-white p-8 text-center text-slate-500 shadow-sm">
+          <div className="app-card p-8 text-center text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
             No vehicle selected.
           </div>
         )}
 
         {selectedVehicle && !deviceId && (
-          <div className="rounded-xl bg-amber-50 p-4 text-sm text-amber-800 shadow-sm">
+          <div className="rounded-lg p-4 text-sm font-semibold" style={{ backgroundColor: 'var(--warning-100)', color: 'var(--warning-800)' }}>
             Selected vehicle has no assigned device.
           </div>
         )}
 
         {channelsLoading && deviceId && (
-          <div className="rounded-xl bg-white p-8 text-center text-slate-500 shadow-sm">
-            Loading camera channels…
+          <div className="app-card p-8 text-center text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+            Loading camera channels...
           </div>
         )}
 
         {panels.length > 0 && (
-          <div ref={cameraSectionRef}>
+          <div ref={cameraSectionRef} className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="flex items-center gap-2 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  <LayoutGrid className="h-4 w-4" style={{ color: 'var(--accent-600)' }} />
+                  Camera grid
+                </p>
+                <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>
+                  {configuredCameraCount} configured, {visibleCameraCount} visible
+                </p>
+              </div>
+              <span className="rounded-full px-3 py-1 text-xs font-semibold" style={{ backgroundColor: isStreaming ? 'var(--success-100)' : 'var(--bg-secondary)', color: isStreaming ? 'var(--success-800)' : 'var(--text-secondary)' }}>
+                {isStreaming ? 'Relays requested' : 'Idle'}
+              </span>
+            </div>
+
             {focusedPanel ? (
               <div className="space-y-4">
                 <VideoPanel
@@ -378,7 +406,7 @@ export default function VideoTelematics() {
                   reconnectSignal={reconnectSignal}
                 />
                 {secondaryPanels.length > 0 && (
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="app-stagger grid grid-cols-1 gap-4 md:grid-cols-2">
                     {secondaryPanels.map((panel) => (
                       <VideoPanel
                         key={panel.channel_no}
@@ -397,7 +425,7 @@ export default function VideoTelematics() {
             ) : (
               <div
                 className={[
-                  'grid gap-5',
+                  'grid gap-4',
                   layout === 'side-by-side' && panels.length > 1 ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1',
                 ].join(' ')}
               >
@@ -432,7 +460,7 @@ export default function VideoTelematics() {
                       reconnectSignal={reconnectSignal}
                     />
                     {rearPanel && (
-                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <div className="app-stagger grid grid-cols-1 gap-4 md:grid-cols-2">
                         <VideoPanel
                           key={rearPanel.channel_no}
                           streamUrl={rearPanel.stream_url}
@@ -462,7 +490,7 @@ export default function VideoTelematics() {
                       reconnectSignal={reconnectSignal}
                     />
                     {frontPanel && frontPanel.channel_no !== rearPanel.channel_no && (
-                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <div className="app-stagger grid grid-cols-1 gap-4 md:grid-cols-2">
                         <VideoPanel
                           key={frontPanel.channel_no}
                           streamUrl={frontPanel.stream_url}
@@ -483,15 +511,16 @@ export default function VideoTelematics() {
         )}
 
         {selectedVehicle && deviceId && panels.length === 0 && !channelsLoading && (
-          <div className="rounded-xl bg-white p-8 text-center text-slate-500 shadow-sm">
-            No camera channels configured for this device. Open Vehicles ? Edit and add a camera source first.
+          <div className="app-card p-8 text-center text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+            No camera channels configured for this device. Open Vehicles &gt; Edit and add a camera source first.
           </div>
         )}
 
         {selectedVehicle && (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <div className="rounded-xl bg-white p-4 shadow-sm lg:col-span-2">
-              <h3 className="mb-3 text-sm font-semibold text-slate-900">
+            <div className="app-card p-4 lg:col-span-2">
+              <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                <MapPinned className="h-4 w-4" style={{ color: 'var(--accent-600)' }} />
                 Current Location
               </h3>
               <MapContainer
@@ -503,7 +532,7 @@ export default function VideoTelematics() {
                 worldCopyJump={false}
                 maxBounds={WORLD_BOUNDS}
                 maxBoundsViscosity={1}
-                className="h-64 w-full rounded-lg"
+                className="h-72 w-full rounded-lg"
               >
                 <TileLayer
                   attribution={MAP_TILE_LAYER.attribution}
@@ -519,12 +548,14 @@ export default function VideoTelematics() {
               </MapContainer>
             </div>
 
-            <div className="rounded-xl bg-white p-4 shadow-sm">
-              <h3 className="mb-3 text-sm font-semibold text-slate-900">
+            <div className="app-card p-4">
+              <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                <Activity className="h-4 w-4" style={{ color: 'var(--accent-600)' }} />
                 Vehicle Data
               </h3>
               <div className="grid grid-cols-2 gap-3">
                 <DataItem
+                  icon={<Gauge className="h-3.5 w-3.5" />}
                   label="Speed"
                   value={
                     latest?.speed_kmh !== null && latest?.speed_kmh !== undefined
@@ -533,6 +564,7 @@ export default function VideoTelematics() {
                   }
                 />
                 <DataItem
+                  icon={<Satellite className="h-3.5 w-3.5" />}
                   label="Ignition"
                   value={
                     latest?.ignition_on === null ||
@@ -544,15 +576,17 @@ export default function VideoTelematics() {
                   }
                 />
                 <DataItem
+                  icon={<MapPinned className="h-3.5 w-3.5" />}
                   label="Heading"
                   value={
                     latest?.heading_deg !== null &&
                     latest?.heading_deg !== undefined
-                      ? `${Math.round(latest.heading_deg)}°`
+                      ? `${Math.round(latest.heading_deg)} deg`
                       : '--'
                   }
                 />
                 <DataItem
+                  icon={<Clock className="h-3.5 w-3.5" />}
                   label="Last Fix"
                   value={formatLastSeen(latest?.recorded_at)}
                 />
@@ -577,20 +611,28 @@ export default function VideoTelematics() {
   );
 }
 
-function StatusItem({ label, value }: { label: string; value: string }) {
+function StatusItem({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
-    <div>
-      <p className="text-xs font-medium text-slate-500">{label}</p>
-      <p className="text-sm font-semibold text-slate-900">{value}</p>
+    <div className="app-card app-hover-lift flex min-h-[5rem] items-center gap-3 p-4">
+      <div className="app-icon-box">
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <p className="app-label truncate">{label}</p>
+        <p className="app-value truncate text-sm">{value}</p>
+      </div>
     </div>
   );
 }
 
-function DataItem({ label, value }: { label: string; value: string }) {
+function DataItem({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
-    <div className="rounded-lg bg-slate-50 p-3">
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className="text-sm font-semibold text-slate-900">{value}</p>
+    <div className="app-muted-tile p-3">
+      <p className="app-label mb-1 flex items-center gap-1.5">
+        {icon}
+        {label}
+      </p>
+      <p className="app-value truncate text-sm">{value}</p>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getChannels, getHealth } from '../services/video';
 import type { DeviceChannelOut, DeviceHealth } from '../types';
@@ -26,17 +27,19 @@ export function useVideoChannels(deviceId: number | null): UseVideoChannelsRetur
     refetchInterval: HEALTH_POLL_INTERVAL_MS,
   });
 
+  const refetch = useCallback(async () => {
+    const [channelsResult] = await Promise.all([
+      channelsQuery.refetch(),
+      healthQuery.refetch(),
+    ]);
+    return channelsResult.data ?? [];
+  }, [channelsQuery.refetch, healthQuery.refetch]);
+
   return {
     channels: channelsQuery.data ?? [],
     health: healthQuery.data ?? [],
     isLoading: channelsQuery.isLoading || healthQuery.isLoading,
     error: (channelsQuery.error ?? healthQuery.error) as Error | null,
-    refetch: async () => {
-      const [channelsResult] = await Promise.all([
-        channelsQuery.refetch(),
-        healthQuery.refetch(),
-      ]);
-      return channelsResult.data ?? [];
-    },
+    refetch,
   };
 }

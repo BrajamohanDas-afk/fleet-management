@@ -2,15 +2,23 @@ import { useQuery } from '@tanstack/react-query';
 import { X, Loader2, Download, Film } from 'lucide-react';
 import { getRecordings, getRecordingDownloadUrl } from '../../services/video';
 import { formatInIst } from '../../utils/formatDate';
+import type { RecordingOut } from '../../types';
 
 interface RecordingsModalProps {
   onClose: () => void;
+}
+
+function recordingStatus(recording: RecordingOut): string {
+  if (!recording.ended_at) return 'Recording';
+  if (recording.size_bytes === null) return 'Unavailable';
+  return `${(recording.size_bytes / 1024 / 1024).toFixed(2)} MB`;
 }
 
 export default function RecordingsModal({ onClose }: RecordingsModalProps) {
   const { data: recordings = [], isLoading, error } = useQuery({
     queryKey: ['recordings'],
     queryFn: getRecordings,
+    refetchInterval: 2_000,
   });
 
   return (
@@ -31,7 +39,7 @@ export default function RecordingsModal({ onClose }: RecordingsModalProps) {
           {isLoading && (
             <div className="flex items-center justify-center py-8 text-slate-500">
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              Loading recordings…
+              Loading recordings...
             </div>
           )}
 
@@ -55,32 +63,37 @@ export default function RecordingsModal({ onClose }: RecordingsModalProps) {
                   <th className="pb-2">ID</th>
                   <th className="pb-2">Channel</th>
                   <th className="pb-2">Started</th>
-                  <th className="pb-2">Size</th>
+                  <th className="pb-2">Status</th>
                   <th className="pb-2 text-right">Download</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {recordings.map((recording) => (
-                  <tr key={recording.id} className="text-slate-700">
-                    <td className="py-3">{recording.id}</td>
-                    <td className="py-3">CH{recording.channel_no}</td>
-                    <td className="py-3">{formatInIst(recording.started_at)}</td>
-                    <td className="py-3">
-                      {recording.size_bytes !== null
-                        ? `${(recording.size_bytes / 1024 / 1024).toFixed(2)} MB`
-                        : '--'}
-                    </td>
-                    <td className="py-3 text-right">
-                      <a
-                        href={getRecordingDownloadUrl(recording.id)}
-                        className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200"
-                      >
-                        <Download className="h-3 w-3" />
-                        Download
-                      </a>
-                    </td>
-                  </tr>
-                ))}
+                {recordings.map((recording) => {
+                  const canDownload = Boolean(recording.ended_at) && recording.size_bytes !== null;
+                  return (
+                    <tr key={recording.id} className="text-slate-700">
+                      <td className="py-3">{recording.id}</td>
+                      <td className="py-3">CH{recording.channel_no}</td>
+                      <td className="py-3">{formatInIst(recording.started_at)}</td>
+                      <td className="py-3">{recordingStatus(recording)}</td>
+                      <td className="py-3 text-right">
+                        {canDownload ? (
+                          <a
+                            href={getRecordingDownloadUrl(recording.id)}
+                            className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200"
+                          >
+                            <Download className="h-3 w-3" />
+                            Download
+                          </a>
+                        ) : (
+                          <span className="inline-flex items-center rounded-lg bg-slate-100 px-2 py-1 text-xs font-medium text-slate-500">
+                            {recording.ended_at ? 'No file' : 'Pending'}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}

@@ -27,8 +27,16 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ backgroundColor: 'var(--bg-primary)' }}>
-      <Sidebar collapsed={sidebarCollapsed} onToggleCollapsed={() => setSidebarCollapsed((current) => !current)} />
-      <main className="min-w-0 flex-1 overflow-auto p-6 transition-[width] duration-200" style={{ color: 'var(--text-primary)' }}>{children}</main>
+      <Sidebar
+        collapsed={sidebarCollapsed}
+        onToggleCollapsed={() => setSidebarCollapsed((current) => !current)}
+      />
+      <main
+        className="min-w-0 flex-1 overflow-auto transition-colors duration-200"
+        style={{ color: 'var(--text-primary)', backgroundColor: 'var(--bg-primary)' }}
+      >
+        {children}
+      </main>
     </div>
   );
 }

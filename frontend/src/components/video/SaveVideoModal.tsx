@@ -1,10 +1,11 @@
-import { useState } from 'react';
-import { X, Loader2, CheckCircle2, Download } from 'lucide-react';
-import { startRecording, getRecordingDownloadUrl } from '../../services/video';
+import { useEffect, useState } from 'react';
+import { X, Loader2, CheckCircle2, Download, AlertTriangle } from 'lucide-react';
+import { startRecording, getRecordingDownloadUrl, getRecordings } from '../../services/video';
 import type { DeviceChannelOut, RecordingOut } from '../../types';
 
 const DEFAULT_DURATION_S = 60;
 const MAX_DURATION_S = 300;
+const RECORDING_POLL_INTERVAL_MS = 2_000;
 
 interface SaveVideoModalProps {
   deviceId: number;
@@ -26,11 +27,41 @@ export default function SaveVideoModal({
   const [recording, setRecording] = useState<RecordingOut | null>(null);
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pollError, setPollError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!recording || recording.ended_at) return;
+
+    let cancelled = false;
+    const refreshRecording = async () => {
+      try {
+        const recordings = await getRecordings();
+        const latest = recordings.find((item) => item.id === recording.id);
+        if (!cancelled && latest) {
+          setRecording(latest);
+          setPollError(null);
+        }
+      } catch {
+        if (!cancelled) setPollError('Unable to refresh recording status.');
+      }
+    };
+
+    void refreshRecording();
+    const intervalId = window.setInterval(() => {
+      void refreshRecording();
+    }, RECORDING_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [recording?.id, recording?.ended_at]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setIsPending(true);
     setError(null);
+    setPollError(null);
     try {
       const result = await startRecording(deviceId, {
         channel_no: channelNo,
@@ -43,6 +74,9 @@ export default function SaveVideoModal({
       setIsPending(false);
     }
   };
+
+  const isFinished = Boolean(recording?.ended_at);
+  const isDownloadable = isFinished && recording?.size_bytes !== null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -61,23 +95,52 @@ export default function SaveVideoModal({
         {recording ? (
           <div className="space-y-4">
             <div className="flex items-start gap-3 rounded-lg bg-emerald-50 p-4">
-              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              {isDownloadable ? (
+                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              ) : recording.ended_at ? (
+                <AlertTriangle className="h-5 w-5 text-amber-600" />
+              ) : (
+                <Loader2 className="h-5 w-5 animate-spin text-emerald-600" />
+              )}
               <div>
                 <p className="text-sm font-medium text-emerald-800">
-                  Recording started
+                  {isDownloadable ? 'Recording ready' : recording.ended_at ? 'Recording unavailable' : 'Recording in progress'}
                 </p>
                 <p className="text-xs text-emerald-700">
-                  Channel {recording.channel_no} • {duration}s
+                  Channel {recording.channel_no} / {duration}s
                 </p>
               </div>
             </div>
-            <a
-              href={getRecordingDownloadUrl(recording.id)}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
-            >
-              <Download className="h-4 w-4" />
-              Download when ready
-            </a>
+
+            {pollError && (
+              <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+                {pollError}
+              </div>
+            )}
+
+            {isDownloadable ? (
+              <a
+                href={getRecordingDownloadUrl(recording.id)}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+              >
+                <Download className="h-4 w-4" />
+                Download
+              </a>
+            ) : recording.ended_at ? (
+              <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                The recording finished, but no video file was created.
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="inline-flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-500"
+              >
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Preparing download
+              </button>
+            )}
+
             <button
               type="button"
               onClick={onClose}

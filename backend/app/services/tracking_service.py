@@ -44,7 +44,6 @@ async def load_public_session(db: AsyncSession, token: str) -> TrackingSession:
     session = await db.scalar(
         select(TrackingSession)
         .options(selectinload(TrackingSession.trip).selectinload(Trip.vehicle))
-        .options(selectinload(TrackingSession.vehicle))
         .where(TrackingSession.token_hash == hash_tracking_token(token))
     )
     now = _utc_now()
@@ -243,7 +242,7 @@ async def ingest_browser_location(
     if duplicate is not None:
         return duplicate, True, duplicate.quality
 
-    vehicle = session.trip.vehicle if session.trip is not None else session.vehicle
+    vehicle = session.trip.vehicle if session.trip is not None else None
     if vehicle is None:
         raise HTTPException(status_code=404, detail="Vehicle not found")
 

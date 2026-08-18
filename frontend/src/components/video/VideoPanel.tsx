@@ -32,6 +32,7 @@ function formatAge(lastFrameAt: Date | null): string {
   const seconds = Math.floor((Date.now() - lastFrameAt.getTime()) / 1000);
   return `${seconds}s ago`;
 }
+
 function waitForIceGatheringComplete(peer: RTCPeerConnection): Promise<void> {
   if (peer.iceGatheringState === 'complete') return Promise.resolve();
 
@@ -50,6 +51,7 @@ function waitForIceGatheringComplete(peer: RTCPeerConnection): Promise<void> {
     timeoutId = setTimeout(done, 3000);
   });
 }
+
 export default function VideoPanel({
   streamUrl,
   channelNo,
@@ -71,7 +73,7 @@ export default function VideoPanel({
     updateHealth,
     onStreamReady,
     onStreamError,
-  } = useVideoPanelState();
+  } = useVideoPanelState({ keepReconnecting: autoStart });
   const videoRef = useRef<HTMLVideoElement>(null);
   const connectingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -80,9 +82,9 @@ export default function VideoPanel({
   }, [health, updateHealth]);
 
   useEffect(() => {
-    if (autoStart) start();
+    if (autoStart && streamUrl) start();
     else stop();
-  }, [autoStart, start, stop]);
+  }, [autoStart, start, stop, streamUrl]);
 
   const didMountRef = useRef(false);
   useEffect(() => {
@@ -188,31 +190,28 @@ export default function VideoPanel({
   };
 
   const handleRefresh = () => {
-    stop();
-    start();
+    retry();
   };
 
   const containerHeight = isFocused
     ? 'h-[34rem]'
     : layout === 'side-by-side'
-      ? 'h-[30rem]'
+      ? 'h-[28rem]'
       : 'h-[28rem]';
+
+  const panelClass = [
+    'app-animate-up relative overflow-hidden rounded-lg border bg-slate-950 shadow-md',
+    containerHeight,
+  ].join(' ');
 
   if (!isRegistered) {
     return (
-      <div
-        className={[
-          'relative flex flex-col items-center justify-center rounded-xl bg-slate-900',
-          containerHeight,
-        ].join(' ')}
-      >
-        <div className="text-center">
-          <AlertTriangle className="mx-auto mb-3 h-10 w-10 text-amber-500" />
-          <p className="text-sm font-medium text-white">Camera panel limit reached</p>
-          <p className="mt-1 text-xs text-slate-400">
-            Up to four camera panels can be active. Stop another panel, then retry {label}.
-          </p>
-        </div>
+      <div className={`${panelClass} flex flex-col items-center justify-center px-6 text-center`}>
+        <AlertTriangle className="mb-3 h-10 w-10 text-amber-400" />
+        <p className="text-sm font-semibold text-white">Camera panel limit reached</p>
+        <p className="mt-1 max-w-md text-xs font-medium text-slate-400">
+          Up to four camera panels can be active. Stop another panel, then retry {label}.
+        </p>
       </div>
     );
   }
@@ -221,22 +220,18 @@ export default function VideoPanel({
   const shouldMountVideo = state === 'connecting' || showVideo;
 
   return (
-    <div
-      className={[
-        'relative overflow-hidden rounded-xl bg-slate-900 shadow-sm',
-        containerHeight,
-      ].join(' ')}
-    >
-      <div className="absolute left-3 top-3 z-10">
+    <div className={panelClass}>
+      <div className="absolute inset-x-0 top-0 z-10 h-24 bg-gradient-to-b from-slate-950/90 to-transparent" />
+      <div className="absolute left-3 top-3 z-20">
         <ChannelBadge label={label} state={state} />
       </div>
 
-      <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+      <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
         <button
           type="button"
           onClick={handleRefresh}
           title="Refresh stream"
-          className="rounded-lg bg-slate-800/80 p-1.5 text-white hover:bg-slate-700"
+          className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/10 text-white backdrop-blur hover:bg-white/20"
         >
           <RefreshCw className="h-4 w-4" />
         </button>
@@ -244,21 +239,23 @@ export default function VideoPanel({
           type="button"
           onClick={handleFullscreen}
           title="Fullscreen"
-          className="rounded-lg bg-slate-800/80 p-1.5 text-white hover:bg-slate-700"
+          className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/10 text-white backdrop-blur hover:bg-white/20"
         >
           <Maximize className="h-4 w-4" />
         </button>
       </div>
 
       {state === 'idle' && (
-        <div className="flex h-full flex-col items-center justify-center">
-          <CameraOff className="mb-3 h-12 w-12 text-slate-500" />
-          <p className="mb-4 text-sm text-slate-400">{streamUrl ? 'Stream stopped' : 'Playback URL unavailable'}</p>
+        <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-lg bg-white/5 text-slate-400">
+            <CameraOff className="h-8 w-8" />
+          </div>
+          <p className="mb-4 text-sm font-semibold text-slate-300">{streamUrl ? 'Stream stopped' : 'Playback URL unavailable'}</p>
           <button
             type="button"
             onClick={start}
             disabled={!streamUrl}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-60"
+            className="app-button app-button-primary disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Play className="h-4 w-4" />
             Start Stream
@@ -280,13 +277,13 @@ export default function VideoPanel({
             ].join(' ')}
           />
           {state === 'connecting' && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900">
-              <Loader2 className="mb-3 h-10 w-10 animate-spin text-primary-400" />
-              <p className="text-sm font-medium text-white">Connecting...</p>
+            <div className="app-video-scan absolute inset-0 flex flex-col items-center justify-center bg-slate-950">
+              <Loader2 className="mb-3 h-10 w-10 animate-spin text-blue-400" />
+              <p className="text-sm font-semibold text-white">Connecting...</p>
             </div>
           )}
           {state === 'degraded' && (
-            <div className="absolute bottom-3 left-3 z-10 rounded-lg bg-amber-500/90 px-3 py-1.5 text-xs font-semibold text-white">
+            <div className="absolute bottom-3 left-3 z-20 rounded-lg bg-amber-500/90 px-3 py-1.5 text-xs font-semibold text-white">
               Last frame {formatAge(lastFrameAt)}
             </div>
           )}
@@ -296,15 +293,15 @@ export default function VideoPanel({
       {state === 'reconnecting' && (
         <div className="flex h-full flex-col items-center justify-center px-6 text-center">
           <CameraOff className="mb-3 h-10 w-10 text-orange-400" />
-          <p className="text-sm font-medium text-white">Connection lost</p>
-          <p className="mb-4 text-xs text-slate-400">
+          <p className="text-sm font-semibold text-white">Connection lost</p>
+          <p className="mb-4 text-xs font-medium text-slate-400">
             Last frame {formatAge(lastFrameAt)}
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-center gap-2">
             <button
               type="button"
               onClick={start}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-2 text-sm font-medium text-white hover:bg-primary-700"
+              className="app-button app-button-primary"
             >
               <Play className="h-4 w-4" />
               Start Stream
@@ -312,7 +309,7 @@ export default function VideoPanel({
             <button
               type="button"
               onClick={retry}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-700 px-3 py-2 text-sm font-medium text-white hover:bg-slate-600"
+              className="app-button bg-slate-800 text-white hover:bg-slate-700"
             >
               <RotateCcw className="h-4 w-4" />
               Reconnect
@@ -322,16 +319,16 @@ export default function VideoPanel({
       )}
 
       {state === 'offline' && (
-        <div className="flex h-full flex-col items-center justify-center">
-          <CameraOff className="mb-3 h-10 w-10 text-red-500" />
-          <p className="mb-1 text-sm font-medium text-white">Camera offline</p>
-          <p className="mb-4 text-xs text-slate-400">
+        <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+          <CameraOff className="mb-3 h-10 w-10 text-red-400" />
+          <p className="mb-1 text-sm font-semibold text-white">Camera offline</p>
+          <p className="mb-4 text-xs font-medium text-slate-400">
             Channel {channelNo} is not reachable.
           </p>
           <button
             type="button"
             onClick={retry}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+            className="app-button app-button-primary"
           >
             <RotateCcw className="h-4 w-4" />
             Retry

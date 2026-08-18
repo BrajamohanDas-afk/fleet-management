@@ -256,7 +256,6 @@ async def create_tracking_session(
     duration_minutes = payload.duration_minutes or settings.TRACKING_DEFAULT_DURATION_MINUTES
     session = TrackingSession(
         trip_id=trip.id,
-        vehicle_id=trip.vehicle_id,
         token_hash=token_hash,
         status=TrackingSessionStatus.WAITING_FOR_DRIVER,
         expires_at=_utcnow() + timedelta(minutes=duration_minutes),

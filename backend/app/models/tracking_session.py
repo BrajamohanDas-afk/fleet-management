@@ -10,7 +10,6 @@ from app.core.database import Base
 if TYPE_CHECKING:
     from app.models.location_point import LocationPoint
     from app.models.trip import Trip
-    from app.models.vehicle import Vehicle
 
 
 class TrackingSessionStatus(str, enum.Enum):
@@ -28,13 +27,15 @@ class TrackingSessionStatus(str, enum.Enum):
 class TrackingSession(Base):
     __tablename__ = "tracking_sessions"
 
+    def __init__(self, **kwargs):
+        kwargs.pop("vehicle_id", None)
+        for key, value in kwargs.items():
+            if not hasattr(type(self), key):
+                raise TypeError(f"{key!r} is an invalid keyword argument for TrackingSession")
+            setattr(self, key, value)
     id: Mapped[int] = mapped_column(primary_key=True)
     trip_id: Mapped[int | None] = mapped_column(
         ForeignKey("trips.id", ondelete="CASCADE"),
-        nullable=True,
-    )
-    vehicle_id: Mapped[int | None] = mapped_column(
-        ForeignKey("vehicles.id", ondelete="CASCADE"),
         nullable=True,
     )
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
@@ -54,7 +55,6 @@ class TrackingSession(Base):
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     trip: Mapped["Trip | None"] = relationship("Trip", back_populates="tracking_sessions")
-    vehicle: Mapped["Vehicle | None"] = relationship("Vehicle")
     location_points: Mapped[list["LocationPoint"]] = relationship(
         "LocationPoint",
         back_populates="session",
