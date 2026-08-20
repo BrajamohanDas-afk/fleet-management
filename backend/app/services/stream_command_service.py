@@ -3,6 +3,7 @@ import json
 from redis.asyncio import Redis
 
 from app.models.device_channel import DeviceChannel
+from app.services.camera_source_service import is_rtsp_source
 
 STREAM_COMMAND_CHANNEL = "stream.commands"
 
@@ -31,7 +32,7 @@ async def publish_stream_command(
 
 
 async def publish_start(redis: Redis, vehicle_id: int, channel: DeviceChannel) -> None:
-    if channel.rtsp_url:
+    if channel.rtsp_url and is_rtsp_source(channel.source_type):
         await publish_stream_command(
             redis,
             action="start",
@@ -42,7 +43,7 @@ async def publish_start(redis: Redis, vehicle_id: int, channel: DeviceChannel) -
 
 
 async def publish_restart(redis: Redis, vehicle_id: int, channel: DeviceChannel) -> None:
-    if channel.rtsp_url:
+    if channel.rtsp_url and is_rtsp_source(channel.source_type):
         await publish_stream_command(
             redis,
             action="restart",

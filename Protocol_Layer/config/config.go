@@ -3,9 +3,10 @@ package config
 import "os"
 
 type Config struct {
-	RedisAddr        string
+	RedisAddr       string
 	MediaMTXRTSPURL string
-	Port             string
+	Port            string
+	HTTPRelayPort   string
 }
 
 func Load() Config {
@@ -24,9 +25,15 @@ func Load() Config {
 		port = "9000"
 	}
 
+	httpRelayPort := os.Getenv("HTTP_RELAY_PORT")
+	if httpRelayPort == "" {
+		httpRelayPort = "9100"
+	}
+
 	return Config{
-		RedisAddr:        redisAddr,
+		RedisAddr:       redisAddr,
 		MediaMTXRTSPURL: mediamtxURL,
-		Port:             port,
+		Port:            port,
+		HTTPRelayPort:   httpRelayPort,
 	}
 }

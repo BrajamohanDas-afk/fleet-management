@@ -16,9 +16,9 @@ import {
   VehicleOut,
   VehicleUpdate,
   getVehicleCameras,
-  testRtspUrl,
+  testCameraUrl,
 } from '../../services/vehicles';
-import type { LicenseStatus, VehicleType } from '../../types';
+import type { CameraConnectionType, HttpCameraFormat, LicenseStatus, VehicleType } from '../../types';
 
 const VEHICLE_TYPES: VehicleType[] = ['bike', 'car', 'truck', 'bus', 'other'];
 const LICENSE_STATUSES: LicenseStatus[] = [
@@ -28,6 +28,17 @@ const LICENSE_STATUSES: LicenseStatus[] = [
   'suspended',
 ];
 const CAMERA_ANGLES = ['Front', 'Rear', 'Cabin', 'Left', 'Right', 'Cargo'];
+const CAMERA_CONNECTION_OPTIONS: { value: CameraConnectionType; label: string }[] = [
+  { value: 'rtsp', label: 'RTSP' },
+  { value: 'http', label: 'HTTP/HTTPS' },
+];
+const HTTP_FORMAT_OPTIONS: { value: HttpCameraFormat; label: string }[] = [
+  { value: 'auto', label: 'Auto-detect' },
+  { value: 'mjpeg', label: 'MJPEG' },
+  { value: 'snapshot', label: 'Snapshot' },
+  { value: 'hls', label: 'HLS' },
+  { value: 'video', label: 'Direct video' },
+];
 const INPUT_CLASS = 'w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500';
 const COMPACT_INPUT_CLASS = 'w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500';
 const FIELD_STYLE = {
@@ -42,6 +53,8 @@ interface CameraInput {
   channel_no: number;
   label: string;
   rtsp_url: string;
+  source_type: CameraConnectionType;
+  source_format: HttpCameraFormat;
 }
 
 interface VehicleFormProps {
@@ -55,15 +68,35 @@ function formatOptionLabel(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-function summarizeRtspUrl(rtspUrl: string): string {
-  const trimmed = rtspUrl.trim();
-  if (!trimmed) return 'No RTSP URL configured';
+function inferConnectionType(sourceUrl: string, fallback?: CameraConnectionType | null): CameraConnectionType {
+  if (fallback === 'http' || fallback === 'rtsp') return fallback;
+  const normalized = sourceUrl.trim().toLowerCase();
+  return normalized.startsWith('http://') || normalized.startsWith('https://') ? 'http' : 'rtsp';
+}
+
+function summarizeCameraUrl(sourceUrl: string, sourceType: CameraConnectionType): string {
+  const trimmed = sourceUrl.trim();
+  if (!trimmed) return sourceType === 'http' ? 'No HTTP camera URL configured' : 'No RTSP URL configured';
   try {
     const parsed = new URL(trimmed);
     return `${parsed.protocol}//${parsed.hostname}${parsed.port ? `:${parsed.port}` : ''}${parsed.pathname}`;
   } catch {
     return trimmed;
   }
+}
+
+function getCameraPlaceholder(camera: CameraInput): string {
+  if (camera.source_type === 'rtsp') return 'rtsp://user:password@camera-host:554/substream';
+  if (camera.source_format === 'hls') return 'https://camera-host/live/playlist.m3u8';
+  if (camera.source_format === 'video') return 'https://camera-host/live/video.mp4';
+  if (camera.source_format === 'snapshot') return 'http://camera-host/GetOneShot?image_size=1280x720';
+  return 'http://camera-host/mjpg/video.mjpg';
+}
+
+function isValidCameraUrl(camera: CameraInput): boolean {
+  const normalized = camera.rtsp_url.trim().toLowerCase();
+  if (camera.source_type === 'rtsp') return normalized.startsWith('rtsp://');
+  return normalized.startsWith('http://') || normalized.startsWith('https://');
 }
 
 export default function VehicleForm({
@@ -117,11 +150,16 @@ export default function VehicleForm({
           .then((cams) => {
             if (cancelled) return;
             setCameras(
-              cams.map((camera) => ({
-                channel_no: camera.channel_no,
-                label: camera.label,
-                rtsp_url: camera.rtsp_url || '',
-              }))
+              cams.map((camera) => {
+                const sourceUrl = camera.source_url || camera.rtsp_url || '';
+                return {
+                  channel_no: camera.channel_no,
+                  label: camera.label,
+                  rtsp_url: sourceUrl,
+                  source_type: inferConnectionType(sourceUrl, camera.source_type),
+                  source_format: inferConnectionType(sourceUrl, camera.source_type) === 'http' ? ((camera.source_format === 'rtsp' ? 'auto' : camera.source_format) || 'auto') : 'auto',
+                };
+              })
             );
             setCamerasLoaded(true);
           })
@@ -192,16 +230,23 @@ export default function VehicleForm({
       return;
     }
 
-    if (configuredCameras.some((camera) => !camera.rtsp_url.trim().toLowerCase().startsWith('rtsp://'))) {
-      setError('Every camera URL must start with rtsp://');
+    if (configuredCameras.some((camera) => !isValidCameraUrl(camera))) {
+      setError('RTSP cameras must use rtsp:// URLs. HTTP cameras must use http:// or https:// URLs.');
       return;
     }
 
-    const cameraPayload = configuredCameras.map((camera) => ({
-      channel_no: camera.channel_no,
-      label: camera.label.trim() || `Camera ${camera.channel_no}`,
-      rtsp_url: camera.rtsp_url.trim(),
-    }));
+    const cameraPayload = configuredCameras.map((camera) => {
+      const sourceUrl = camera.rtsp_url.trim();
+      return {
+        channel_no: camera.channel_no,
+        label: camera.label.trim() || `Camera ${camera.channel_no}`,
+        rtsp_url: sourceUrl,
+        source_url: sourceUrl,
+        source_type: camera.source_type,
+        source_format: camera.source_type === 'http' ? camera.source_format : 'auto',
+        http_format: camera.source_type === 'http' ? camera.source_format : 'auto',
+      };
+    });
 
     const data: VehicleCreate = {
       registration_no: registrationNo.trim(),
@@ -240,7 +285,7 @@ export default function VehicleForm({
   const addCamera = () => {
     const channelNo = Math.max(0, ...cameras.map((camera) => camera.channel_no)) + 1;
     const nextIndex = cameras.length;
-    setCameras((current) => [...current, { channel_no: channelNo, label: 'Front', rtsp_url: '' }]);
+    setCameras((current) => [...current, { channel_no: channelNo, label: 'Front', rtsp_url: '', source_type: 'rtsp', source_format: 'auto' }]);
     setEditingCameraIndex(nextIndex);
   };
 
@@ -248,7 +293,7 @@ export default function VehicleForm({
     setCameras((current) => current.map((camera, cameraIndex) =>
       cameraIndex === index ? { ...camera, ...patch } : camera
     ));
-    if (patch.rtsp_url !== undefined) {
+    if (patch.rtsp_url !== undefined || patch.source_type !== undefined || patch.source_format !== undefined) {
       setTestResults((prev) => ({ ...prev, [index]: 'idle' }));
       setTestMessages((prev) => ({ ...prev, [index]: '' }));
     }
@@ -269,7 +314,14 @@ export default function VehicleForm({
     const cam = cameras[index];
     if (!cam.rtsp_url.trim()) {
       setTestResults((prev) => ({ ...prev, [index]: 'error' }));
-      setTestMessages((prev) => ({ ...prev, [index]: 'Enter an RTSP URL before testing.' }));
+      setTestMessages((prev) => ({ ...prev, [index]: 'Enter a camera URL before testing.' }));
+      setEditingCameraIndex(index);
+      return;
+    }
+
+    if (!isValidCameraUrl(cam)) {
+      setTestResults((prev) => ({ ...prev, [index]: 'error' }));
+      setTestMessages((prev) => ({ ...prev, [index]: cam.source_type === 'http' ? 'Use an http:// or https:// camera URL.' : 'Use an rtsp:// camera URL.' }));
       setEditingCameraIndex(index);
       return;
     }
@@ -277,7 +329,7 @@ export default function VehicleForm({
     setTestResults((prev) => ({ ...prev, [index]: 'testing' }));
     setTestMessages((prev) => ({ ...prev, [index]: '' }));
     try {
-      const res = await testRtspUrl(cam.rtsp_url, vehicle?.id);
+      const res = await testCameraUrl(cam.rtsp_url, cam.source_type, cam.source_format, vehicle?.id);
       setTestResults((prev) => ({ ...prev, [index]: res.status === 'ok' ? 'ok' : 'error' }));
       setTestMessages((prev) => ({ ...prev, [index]: res.detail || (res.status === 'ok' ? 'Connected' : 'Connection failed') }));
     } catch (err) {
@@ -339,7 +391,7 @@ export default function VehicleForm({
                   <Camera className="h-4 w-4" style={{ color: 'var(--accent-600)' }} /> Camera sources
                 </p>
                 <p className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                  Add each DVR RTSP sub-stream. Existing cameras can be edited directly below.
+                  Add RTSP relay streams or HTTP/HTTPS camera media links. Existing cameras can be edited directly below.
                 </p>
               </div>
               <button
@@ -393,7 +445,7 @@ export default function VehicleForm({
 
             {camerasLoaded && cameras.length === 0 && (
               <div className="rounded-lg border p-3 text-sm" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-secondary)', color: 'var(--text-secondary)' }}>
-                No cameras configured. Use Add camera to add a Front, Rear, or Cabin RTSP stream.
+                No cameras configured. Use Add camera to add a Front, Rear, or Cabin source.
               </div>
             )}
 
@@ -409,7 +461,7 @@ export default function VehicleForm({
                           CH{camera.channel_no} - {camera.label || 'Camera'}
                         </p>
                         <p className="mt-1 truncate text-xs" style={{ color: camera.rtsp_url.trim() ? 'var(--text-secondary)' : 'var(--danger-700)' }}>
-                          {summarizeRtspUrl(camera.rtsp_url)}
+                          {summarizeCameraUrl(camera.rtsp_url, camera.source_type)}
                         </p>
                       </div>
                       <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
@@ -484,11 +536,34 @@ export default function VehicleForm({
                             ))}
                           </select>
                         </div>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          <select
+                            aria-label={`Camera connection ${index + 1}`}
+                            value={camera.source_type}
+                            onChange={(e) => updateCamera(index, { source_type: e.target.value as CameraConnectionType })}
+                            className="app-select w-full"
+                          >
+                            {CAMERA_CONNECTION_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                          <select
+                            aria-label={`HTTP camera format ${index + 1}`}
+                            value={camera.source_format}
+                            onChange={(e) => updateCamera(index, { source_format: e.target.value as HttpCameraFormat })}
+                            className="app-select w-full"
+                            disabled={camera.source_type !== 'http'}
+                          >
+                            {HTTP_FORMAT_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                        </div>
                         <input
-                          aria-label={`${camera.label} RTSP URL`}
+                          aria-label={`${camera.label} camera URL`}
                           type="text"
                           inputMode="url"
-                          placeholder="rtsp://user:password@camera-host:554/substream"
+                          placeholder={getCameraPlaceholder(camera)}
                           value={camera.rtsp_url}
                           onChange={(e) => updateCamera(index, { rtsp_url: e.target.value })}
                           className={INPUT_CLASS}

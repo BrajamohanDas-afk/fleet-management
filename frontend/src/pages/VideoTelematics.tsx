@@ -34,10 +34,24 @@ const STATUS_LABELS: Record<VehicleStatus, string> = {
 
 type PanelConfig = Pick<
   DeviceChannelOut,
-  'channel_no' | 'label' | 'stream_url'
+  'channel_no' | 'label' | 'stream_url' | 'http_stream_url' | 'source_type' | 'source_format'
 > & {
   health: DeviceHealth | null;
 };
+
+type PlaybackChannel = Pick<DeviceChannelOut, 'source_type' | 'stream_url' | 'http_stream_url'>;
+
+function isHttpChannel(channel: PlaybackChannel): boolean {
+  return channel.source_type === 'http' || Boolean(channel.http_stream_url);
+}
+
+function isRtspChannel(channel: PlaybackChannel): boolean {
+  return !isHttpChannel(channel);
+}
+
+function hasPlaybackUrl(channel: PlaybackChannel): boolean {
+  return isHttpChannel(channel) ? Boolean(channel.http_stream_url) : Boolean(channel.stream_url);
+}
 
 function waitForStreamReady(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -138,6 +152,10 @@ export default function VideoTelematics() {
         health.find((h) => h.channel_no === channel.channel_no) ?? null,
     }));
   }, [channels, health]);
+  const recordableChannels = useMemo(
+    () => channels.filter(isRtspChannel),
+    [channels]
+  );
 
   const handleVehicleChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const id = Number(event.target.value);
@@ -177,19 +195,23 @@ export default function VideoTelematics() {
       return;
     }
 
-    if (!currentChannels.some((channel) => channel.stream_url)) {
-      setStreamError('Camera channels exist but no playback URLs are available. Check MediaMTX configuration.');
+    if (!currentChannels.some(hasPlaybackUrl)) {
+      setStreamError('Camera channels exist but no playback URLs are available. RTSP needs stream_url; HTTP needs http_stream_url from the backend.');
       return;
     }
 
+    const rtspChannels = currentChannels.filter(isRtspChannel);
+
     try {
-      await startStreams(deviceId);
-      await waitForStreamReady(STREAM_READY_WAIT_MS);
+      if (rtspChannels.length > 0) {
+        await startStreams(deviceId);
+        await waitForStreamReady(STREAM_READY_WAIT_MS);
+      }
       await refetchVideoChannels();
       setIsStreaming(true);
       setReconnectSignal((prev) => prev + 1);
     } catch {
-      setStreamError('Failed to request camera relays. Check the API, Redis, protocol-layer, and MediaMTX services.');
+      setStreamError('Failed to request RTSP camera relays. Check the API, Redis, protocol-layer, and MediaMTX services.');
     }
   };
   const handleStopCameras = () => {
@@ -198,7 +220,7 @@ export default function VideoTelematics() {
   };
 
   useEffect(() => {
-    if (!isStreaming || !deviceId) return;
+    if (!isStreaming || !deviceId || !channels.some(isRtspChannel)) return;
 
     let cancelled = false;
     const refreshRelays = async () => {
@@ -218,10 +240,17 @@ export default function VideoTelematics() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [deviceId, isStreaming, refetchVideoChannels]);
+  }, [channels, deviceId, isStreaming, refetchVideoChannels]);
 
   const handleReconnectView = () => setReconnectSignal((prev) => prev + 1);
-  const handleSaveVideo = () => setIsSaveModalOpen(true);
+  const handleSaveVideo = () => {
+    if (recordableChannels.length === 0) {
+      setStreamError('Recording is available for RTSP relay cameras only. HTTP cameras are live preview only.');
+      return;
+    }
+    setStreamError(null);
+    setIsSaveModalOpen(true);
+  };
   const handleSavedVideos = () => setIsRecordingsModalOpen(true);
 
   useEffect(() => {
@@ -256,6 +285,7 @@ export default function VideoTelematics() {
     [latest?.latitude, latest?.longitude]
   );
 
+  const hasRtspPanels = panels.some(isRtspChannel);
   const frontPanel = panels.find((p) =>
     p.label.toLowerCase().includes('front')
   ) ?? panels[0];
@@ -388,7 +418,7 @@ export default function VideoTelematics() {
                 </p>
               </div>
               <span className="rounded-full px-3 py-1 text-xs font-semibold" style={{ backgroundColor: isStreaming ? 'var(--success-100)' : 'var(--bg-secondary)', color: isStreaming ? 'var(--success-800)' : 'var(--text-secondary)' }}>
-                {isStreaming ? 'Relays requested' : 'Idle'}
+                {isStreaming ? (hasRtspPanels ? 'Relays requested' : 'HTTP preview active') : 'Idle'}
               </span>
             </div>
 
@@ -397,6 +427,9 @@ export default function VideoTelematics() {
                 <VideoPanel
                   key={focusedPanel.channel_no}
                   streamUrl={focusedPanel.stream_url}
+                  httpStreamUrl={focusedPanel.http_stream_url}
+                  sourceType={focusedPanel.source_type}
+                  sourceFormat={focusedPanel.source_format}
                   channelNo={focusedPanel.channel_no}
                   label={focusedPanel.label}
                   layout={layout}
@@ -411,6 +444,9 @@ export default function VideoTelematics() {
                       <VideoPanel
                         key={panel.channel_no}
                         streamUrl={panel.stream_url}
+                        httpStreamUrl={panel.http_stream_url}
+                        sourceType={panel.source_type}
+                        sourceFormat={panel.source_format}
                         channelNo={panel.channel_no}
                         label={panel.label}
                         layout={layout}
@@ -435,6 +471,9 @@ export default function VideoTelematics() {
                       <VideoPanel
                         key={panel.channel_no}
                         streamUrl={panel.stream_url}
+                        httpStreamUrl={panel.http_stream_url}
+                        sourceType={panel.source_type}
+                        sourceFormat={panel.source_format}
                         channelNo={panel.channel_no}
                         label={panel.label}
                         layout={layout}
@@ -451,6 +490,9 @@ export default function VideoTelematics() {
                     <VideoPanel
                       key={frontPanel.channel_no}
                       streamUrl={frontPanel.stream_url}
+                      httpStreamUrl={frontPanel.http_stream_url}
+                      sourceType={frontPanel.source_type}
+                      sourceFormat={frontPanel.source_format}
                       channelNo={frontPanel.channel_no}
                       label={frontPanel.label}
                       layout={layout}
@@ -464,6 +506,9 @@ export default function VideoTelematics() {
                         <VideoPanel
                           key={rearPanel.channel_no}
                           streamUrl={rearPanel.stream_url}
+                          httpStreamUrl={rearPanel.http_stream_url}
+                          sourceType={rearPanel.source_type}
+                          sourceFormat={rearPanel.source_format}
                           channelNo={rearPanel.channel_no}
                           label={rearPanel.label}
                           layout={layout}
@@ -481,6 +526,9 @@ export default function VideoTelematics() {
                     <VideoPanel
                       key={rearPanel.channel_no}
                       streamUrl={rearPanel.stream_url}
+                      httpStreamUrl={rearPanel.http_stream_url}
+                      sourceType={rearPanel.source_type}
+                      sourceFormat={rearPanel.source_format}
                       channelNo={rearPanel.channel_no}
                       label={rearPanel.label}
                       layout={layout}
@@ -494,6 +542,9 @@ export default function VideoTelematics() {
                         <VideoPanel
                           key={frontPanel.channel_no}
                           streamUrl={frontPanel.stream_url}
+                          httpStreamUrl={frontPanel.http_stream_url}
+                          sourceType={frontPanel.source_type}
+                          sourceFormat={frontPanel.source_format}
                           channelNo={frontPanel.channel_no}
                           label={frontPanel.label}
                           layout={layout}
@@ -599,7 +650,7 @@ export default function VideoTelematics() {
       {isSaveModalOpen && selectedVehicle && deviceId && (
         <SaveVideoModal
           deviceId={deviceId}
-          channels={channels}
+          channels={recordableChannels}
           onClose={() => setIsSaveModalOpen(false)}
         />
       )}

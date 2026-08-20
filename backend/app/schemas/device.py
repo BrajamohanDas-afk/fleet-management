@@ -34,6 +34,9 @@ class DeviceChannelOut(BaseModel):
     stream_path: str | None = None
     stream_url: str | None = None
     rtsp_url: str | None = None
+    source_type: str = "rtsp"
+    source_format: str = "rtsp"
+    http_stream_url: str | None = None
 
 
 class DeviceOut(BaseModel):

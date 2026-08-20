@@ -7,15 +7,18 @@ import {
   Loader2,
   AlertTriangle,
 } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVideoPanelState } from '../../hooks/useVideoPanelState';
 import ChannelBadge from './ChannelBadge';
-import type { DeviceHealth } from '../../types';
+import type { CameraConnectionType, DeviceHealth, HttpCameraFormat } from '../../types';
 
 type LayoutMode = 'side-by-side' | 'front-focus' | 'rear-focus';
 
 interface VideoPanelProps {
   streamUrl: string | null;
+  httpStreamUrl?: string | null;
+  sourceType?: CameraConnectionType | null;
+  sourceFormat?: HttpCameraFormat | 'rtsp' | null;
   channelNo: number;
   label: string;
   layout: LayoutMode;
@@ -26,6 +29,7 @@ interface VideoPanelProps {
 }
 
 const CONNECTING_TIMEOUT_MS = 10_000;
+const SNAPSHOT_REFRESH_MS = 1_000;
 
 function formatAge(lastFrameAt: Date | null): string {
   if (!lastFrameAt) return 'unknown';
@@ -52,8 +56,16 @@ function waitForIceGatheringComplete(peer: RTCPeerConnection): Promise<void> {
   });
 }
 
+function withCacheBust(url: string): string {
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}t=${Date.now()}`;
+}
+
 export default function VideoPanel({
   streamUrl,
+  httpStreamUrl = null,
+  sourceType = 'rtsp',
+  sourceFormat = 'rtsp',
   channelNo,
   label,
   layout,
@@ -75,16 +87,24 @@ export default function VideoPanel({
     onStreamError,
   } = useVideoPanelState({ keepReconnecting: autoStart });
   const videoRef = useRef<HTMLVideoElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
   const connectingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null);
+
+  const isHttpSource = sourceType === 'http' || Boolean(httpStreamUrl);
+  const effectiveFormat = sourceFormat === 'rtsp' ? 'auto' : sourceFormat || 'auto';
+  const playbackUrl = isHttpSource ? httpStreamUrl : streamUrl;
+  const isImageHttp = isHttpSource && (effectiveFormat === 'snapshot' || effectiveFormat === 'mjpeg' || effectiveFormat === 'auto');
+  const isVideoHttp = isHttpSource && !isImageHttp;
 
   useEffect(() => {
-    updateHealth(health);
-  }, [health, updateHealth]);
+    if (!isHttpSource) updateHealth(health);
+  }, [health, isHttpSource, updateHealth]);
 
   useEffect(() => {
-    if (autoStart && streamUrl) start();
+    if (autoStart && playbackUrl) start();
     else stop();
-  }, [autoStart, start, stop, streamUrl]);
+  }, [autoStart, playbackUrl, start, stop]);
 
   const didMountRef = useRef(false);
   useEffect(() => {
@@ -117,7 +137,7 @@ export default function VideoPanel({
   }, [state, connectionKey, onStreamError]);
 
   useEffect(() => {
-    if (connectionKey === 0 || !videoRef.current || !streamUrl) return;
+    if (isHttpSource || connectionKey === 0 || !videoRef.current || !streamUrl) return;
 
     const peer = new RTCPeerConnection();
     let sessionUrl: string | null = null;
@@ -171,7 +191,36 @@ export default function VideoPanel({
       peer.close();
       if (videoRef.current) videoRef.current.srcObject = null;
     };
-  }, [connectionKey, streamUrl, onStreamError, onStreamReady]);
+  }, [connectionKey, isHttpSource, streamUrl, onStreamError, onStreamReady]);
+
+  useEffect(() => {
+    if (!isHttpSource || connectionKey === 0 || !httpStreamUrl) return;
+    if (isVideoHttp) return;
+
+    let cancelled = false;
+    const showFrame = () => {
+      if (cancelled || !httpStreamUrl) return;
+      setSnapshotUrl(effectiveFormat === 'snapshot' ? withCacheBust(httpStreamUrl) : httpStreamUrl);
+    };
+
+    showFrame();
+    if (effectiveFormat !== 'snapshot') return () => { cancelled = true; };
+
+    const intervalId = window.setInterval(showFrame, SNAPSHOT_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [connectionKey, effectiveFormat, httpStreamUrl, isHttpSource, isVideoHttp]);
+
+  useEffect(() => {
+    if (!isHttpSource || !isVideoHttp || state !== 'connecting') return;
+    const video = videoRef.current;
+    if (!video || !httpStreamUrl) return;
+    video.srcObject = null;
+    video.src = httpStreamUrl;
+    void video.play().then(onStreamReady).catch(onStreamError);
+  }, [httpStreamUrl, isHttpSource, isVideoHttp, state, connectionKey, onStreamError, onStreamReady]);
 
   useEffect(() => {
     return () => {
@@ -184,8 +233,9 @@ export default function VideoPanel({
   }, []);
 
   const handleFullscreen = () => {
-    if (videoRef.current?.requestFullscreen) {
-      void videoRef.current.requestFullscreen();
+    const target = isImageHttp ? imageRef.current : videoRef.current;
+    if (target?.requestFullscreen) {
+      void target.requestFullscreen();
     }
   };
 
@@ -204,6 +254,13 @@ export default function VideoPanel({
     containerHeight,
   ].join(' ');
 
+  const showVideo = state === 'live' || state === 'degraded';
+  const shouldMountVideo = state === 'connecting' || showVideo;
+  const idleText = useMemo(() => {
+    if (playbackUrl) return isHttpSource ? 'HTTP camera stopped' : 'Stream stopped';
+    return isHttpSource ? 'HTTP relay URL unavailable' : 'Playback URL unavailable';
+  }, [isHttpSource, playbackUrl]);
+
   if (!isRegistered) {
     return (
       <div className={`${panelClass} flex flex-col items-center justify-center px-6 text-center`}>
@@ -215,9 +272,6 @@ export default function VideoPanel({
       </div>
     );
   }
-
-  const showVideo = state === 'live' || state === 'degraded';
-  const shouldMountVideo = state === 'connecting' || showVideo;
 
   return (
     <div className={panelClass}>
@@ -250,11 +304,11 @@ export default function VideoPanel({
           <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-lg bg-white/5 text-slate-400">
             <CameraOff className="h-8 w-8" />
           </div>
-          <p className="mb-4 text-sm font-semibold text-slate-300">{streamUrl ? 'Stream stopped' : 'Playback URL unavailable'}</p>
+          <p className="mb-4 text-sm font-semibold text-slate-300">{idleText}</p>
           <button
             type="button"
             onClick={start}
-            disabled={!streamUrl}
+            disabled={!playbackUrl}
             className="app-button app-button-primary disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Play className="h-4 w-4" />
@@ -265,17 +319,33 @@ export default function VideoPanel({
 
       {shouldMountVideo && (
         <div className="relative h-full w-full">
-          <video
-            key={connectionKey}
-            ref={videoRef}
-            autoPlay
-            muted
-            playsInline
-            className={[
-              'h-full w-full object-cover transition-opacity duration-200',
-              showVideo ? 'opacity-100' : 'opacity-0',
-            ].join(' ')}
-          />
+          {isImageHttp ? (
+            <img
+              key={`${connectionKey}-${snapshotUrl ?? ''}`}
+              ref={imageRef}
+              src={snapshotUrl ?? undefined}
+              alt={`${label} camera`}
+              onLoad={onStreamReady}
+              onError={onStreamError}
+              className={[
+                'h-full w-full object-cover transition-opacity duration-200',
+                showVideo ? 'opacity-100' : 'opacity-0',
+              ].join(' ')}
+            />
+          ) : (
+            <video
+              key={connectionKey}
+              ref={videoRef}
+              autoPlay
+              muted
+              playsInline
+              controls={isVideoHttp}
+              className={[
+                'h-full w-full object-cover transition-opacity duration-200',
+                showVideo ? 'opacity-100' : 'opacity-0',
+              ].join(' ')}
+            />
+          )}
           {state === 'connecting' && (
             <div className="app-video-scan absolute inset-0 flex flex-col items-center justify-center bg-slate-950">
               <Loader2 className="mb-3 h-10 w-10 animate-spin text-blue-400" />

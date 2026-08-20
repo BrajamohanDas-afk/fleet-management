@@ -1,9 +1,15 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.vehicle import LicenseStatus, VehicleType
-from app.services.rtsp_service import validate_rtsp_url
+from app.services.camera_source_service import (
+    SOURCE_TYPE_HTTP,
+    SOURCE_TYPE_RTSP,
+    normalize_source_format,
+    normalize_source_type,
+    validate_camera_source_url,
+)
 from app.services.status_service import VehicleStatus
 
 
@@ -24,11 +30,15 @@ class VehicleCameraCreate(BaseModel):
     channel_no: int = Field(ge=1, le=64)
     label: str = Field(min_length=1, max_length=64)
     rtsp_url: str = Field(min_length=8, max_length=2048)
+    source_type: str | None = None
+    source_format: str | None = Field(default=None, validation_alias=AliasChoices("source_format", "http_format"))
 
-    @field_validator("rtsp_url")
-    @classmethod
-    def normalize_rtsp_url(cls, value: str) -> str:
-        return validate_rtsp_url(value)
+    @model_validator(mode="after")
+    def normalize_camera_source(self) -> "VehicleCameraCreate":
+        self.source_type = normalize_source_type(self.source_type, self.rtsp_url)
+        self.source_format = normalize_source_format(self.source_type, self.source_format)
+        self.rtsp_url = validate_camera_source_url(self.rtsp_url, source_type=self.source_type)
+        return self
 
 
 class VehicleDeviceCreate(BaseModel):
@@ -106,11 +116,15 @@ class CameraUpdateItem(BaseModel):
     channel_no: int = Field(ge=1, le=64)
     label: str | None = Field(default=None, min_length=1, max_length=64)
     rtsp_url: str = Field(min_length=8, max_length=2048)
+    source_type: str | None = None
+    source_format: str | None = Field(default=None, validation_alias=AliasChoices("source_format", "http_format"))
 
-    @field_validator("rtsp_url")
-    @classmethod
-    def normalize_rtsp_url(cls, value: str) -> str:
-        return validate_rtsp_url(value)
+    @model_validator(mode="after")
+    def normalize_camera_source(self) -> "CameraUpdateItem":
+        self.source_type = normalize_source_type(self.source_type, self.rtsp_url)
+        self.source_format = normalize_source_format(self.source_type, self.source_format)
+        self.rtsp_url = validate_camera_source_url(self.rtsp_url, source_type=self.source_type)
+        return self
 
 
 class CameraUpdatePayload(BaseModel):
@@ -126,16 +140,22 @@ class CameraUpdatePayload(BaseModel):
 
 class CameraTestRequest(BaseModel):
     rtsp_url: str = Field(min_length=8, max_length=2048)
+    source_type: str | None = None
+    source_format: str | None = Field(default=None, validation_alias=AliasChoices("source_format", "http_format"))
 
-    @field_validator("rtsp_url")
-    @classmethod
-    def normalize_rtsp_url(cls, value: str) -> str:
-        return validate_rtsp_url(value)
+    @model_validator(mode="after")
+    def normalize_camera_source(self) -> "CameraTestRequest":
+        self.source_type = normalize_source_type(self.source_type, self.rtsp_url)
+        self.source_format = normalize_source_format(self.source_type, self.source_format)
+        self.rtsp_url = validate_camera_source_url(self.rtsp_url, source_type=self.source_type)
+        return self
 
 
 class CameraTestResponse(BaseModel):
     status: str
     detail: str | None = None
+    source_type: str | None = None
+    source_format: str | None = Field(default=None, validation_alias=AliasChoices("source_format", "http_format"))
 
 
 class VehicleSummaryOut(BaseModel):

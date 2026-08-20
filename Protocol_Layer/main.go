@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"protocol-layer/config"
 	"protocol-layer/protocol"
@@ -50,10 +51,18 @@ func main() {
 		}
 		return telemetryPublisher.Publish(ctx, telemetry)
 	})
+	httpRelay := stream.NewHTTPRelayServer(":" + cfg.HTTPRelayPort)
 
 	go func() {
 		if err := tcpServer.Start(); err != nil && ctx.Err() == nil {
 			log.Printf("telemetry TCP server error: %v", err)
+		}
+	}()
+
+	go func() {
+		log.Printf("HTTP camera relay listening on :%s", cfg.HTTPRelayPort)
+		if err := httpRelay.Start(); err != nil && ctx.Err() == nil {
+			log.Printf("HTTP camera relay server error: %v", err)
 		}
 	}()
 
@@ -75,6 +84,12 @@ func main() {
 	cancel()
 	if err := tcpServer.Stop(); err != nil {
 		log.Printf("telemetry TCP server stop error: %v", err)
+	}
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+	if err := httpRelay.Stop(shutdownCtx); err != nil {
+		log.Printf("HTTP camera relay stop error: %v", err)
 	}
 
 	// Stop all active streams (cancels FFmpeg processes)

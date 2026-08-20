@@ -22,6 +22,13 @@ from app.schemas.vehicle import (
     VehicleUpdate,
     VehicleWithLatest,
 )
+from app.services.camera_source_service import (
+    SOURCE_TYPE_HTTP,
+    SOURCE_TYPE_RTSP,
+    is_rtsp_source,
+    probe_http_camera_source,
+)
+from app.services.device_service import device_channel_out
 from app.services.rtsp_service import mask_rtsp_url
 from app.services.status_service import VehicleStatus
 from app.services.stream_command_service import publish_stream_command, publish_stop
@@ -119,7 +126,7 @@ async def _device_out(db: AsyncSession, device: Device) -> DeviceOut:
         external_device_identifier=device.external_device_identifier,
         connection_status=device.connection_status,
         last_external_sync_at=device.last_external_sync_at,
-        channels=channels,
+        channels=[device_channel_out(channel) for channel in channels],
     )
 
 
@@ -141,37 +148,54 @@ async def _sync_device_channels(
 
     for channel in existing_channels:
         camera = incoming_by_channel.pop(channel.channel_no, None)
+        was_rtsp = is_rtsp_source(channel.source_type)
         if camera is None:
-            commands.append(("stop", channel.channel_no, None))
+            if was_rtsp:
+                commands.append(("stop", channel.channel_no, None))
             await db.delete(channel)
             continue
 
         label = getattr(camera, "label", None)
+        source_type = camera.source_type or SOURCE_TYPE_RTSP
+        source_format = camera.source_format or ("rtsp" if source_type == SOURCE_TYPE_RTSP else "auto")
         rtsp_url = camera.rtsp_url
+        will_be_rtsp = is_rtsp_source(source_type)
+        stream_path = _stream_path(vehicle_id, camera.channel_no) if will_be_rtsp else None
         url_changed = channel.rtsp_url != rtsp_url
-        path_changed = channel.stream_path != _stream_path(vehicle_id, camera.channel_no)
+        source_changed = (channel.source_type or SOURCE_TYPE_RTSP) != source_type
+        path_changed = channel.stream_path != stream_path
+
+        if was_rtsp and not will_be_rtsp:
+            commands.append(("stop", channel.channel_no, None))
+        elif will_be_rtsp and (url_changed or source_changed or path_changed):
+            commands.append(("restart", channel.channel_no, rtsp_url))
+
         channel.label = label.strip() if label else channel.label
         channel.rtsp_url = rtsp_url
-        channel.stream_path = _stream_path(vehicle_id, camera.channel_no)
-        if url_changed or path_changed:
-            commands.append(("restart", channel.channel_no, rtsp_url))
+        channel.source_type = source_type
+        channel.source_format = source_format
+        channel.stream_path = stream_path
 
     for camera in incoming_by_channel.values():
         label = getattr(camera, "label", None) or f"Camera {camera.channel_no}"
+        source_type = camera.source_type or SOURCE_TYPE_RTSP
+        source_format = camera.source_format or ("rtsp" if source_type == SOURCE_TYPE_RTSP else "auto")
         db.add(
             DeviceChannel(
                 device_id=device.id,
                 channel_no=camera.channel_no,
                 label=label.strip(),
                 rtsp_url=camera.rtsp_url,
-                stream_path=_stream_path(vehicle_id, camera.channel_no),
+                source_type=source_type,
+                source_format=source_format,
+                stream_path=_stream_path(vehicle_id, camera.channel_no) if is_rtsp_source(source_type) else None,
             )
         )
-        commands.append(("start", camera.channel_no, camera.rtsp_url))
+        if is_rtsp_source(source_type):
+            commands.append(("start", camera.channel_no, camera.rtsp_url))
 
     await db.flush()
     return commands
-
 
 async def _publish_channel_commands(
     redis: Redis,
@@ -264,10 +288,35 @@ async def _upsert_vehicle_device(
     return device, commands
 
 
-async def _run_camera_test(rtsp_url: str) -> CameraTestResponse:
+async def _run_camera_test(payload: CameraTestRequest) -> CameraTestResponse:
+    source_type = payload.source_type or SOURCE_TYPE_RTSP
+    source_format = payload.source_format or ("rtsp" if source_type == SOURCE_TYPE_RTSP else "auto")
+    if source_type == SOURCE_TYPE_HTTP:
+        try:
+            detected_format, detail = await probe_http_camera_source(payload.rtsp_url)
+        except ValueError as exc:
+            return CameraTestResponse(
+                status="error",
+                detail=str(exc),
+                source_type=source_type,
+                source_format=source_format,
+            )
+        return CameraTestResponse(
+            status="ok",
+            detail=detail,
+            source_type=source_type,
+            source_format=detected_format if source_format == "auto" else source_format,
+        )
+
+    rtsp_url = payload.rtsp_url
     reachability_error = await _rtsp_tcp_reachability_error(rtsp_url)
     if reachability_error:
-        return CameraTestResponse(status="error", detail=reachability_error)
+        return CameraTestResponse(
+            status="error",
+            detail=reachability_error,
+            source_type=source_type,
+            source_format=source_format,
+        )
 
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -288,16 +337,35 @@ async def _run_camera_test(rtsp_url: str) -> CameraTestResponse:
             detail = stderr.decode(errors="replace").strip() or "Connection failed"
             detail = detail.replace(rtsp_url, mask_rtsp_url(rtsp_url))
             if proc.returncode == 0:
-                return CameraTestResponse(status="ok")
-            return CameraTestResponse(status="error", detail=detail)
+                return CameraTestResponse(status="ok", source_type=source_type, source_format=source_format)
+            return CameraTestResponse(
+                status="error",
+                detail=detail,
+                source_type=source_type,
+                source_format=source_format,
+            )
         except (TimeoutError, asyncio.TimeoutError):
             proc.kill()
-            return CameraTestResponse(status="error", detail="Connection timeout")
+            return CameraTestResponse(
+                status="error",
+                detail="Connection timeout",
+                source_type=source_type,
+                source_format=source_format,
+            )
     except FileNotFoundError:
-        return CameraTestResponse(status="error", detail="ffprobe not installed")
+        return CameraTestResponse(
+            status="error",
+            detail="ffprobe not installed",
+            source_type=source_type,
+            source_format=source_format,
+        )
     except Exception:
-        return CameraTestResponse(status="error", detail="Camera connection failed")
-
+        return CameraTestResponse(
+            status="error",
+            detail="Camera connection failed",
+            source_type=source_type,
+            source_format=source_format,
+        )
 
 @router.post("/{vehicle_id}/devices", response_model=DeviceOut, status_code=status.HTTP_201_CREATED)
 async def create_vehicle_device(
@@ -398,7 +466,7 @@ async def test_camera(
     current_user: dict = Depends(get_current_user),
 ) -> CameraTestResponse:
     _ = current_user
-    return await _run_camera_test(payload.rtsp_url)
+    return await _run_camera_test(payload)
 
 
 @router.get("/{vehicle_id}", response_model=VehicleWithLatest)
@@ -478,7 +546,7 @@ async def delete_vehicle(
             select(DeviceChannel).where(DeviceChannel.device_id == device.id)
         )
         channels = result.scalars().all()
-        stop_channels.extend(channel.channel_no for channel in channels)
+        stop_channels.extend(channel.channel_no for channel in channels if is_rtsp_source(channel.source_type))
 
     await redis.hdel("fleet:latest", str(vehicle_id))
     await vehicle_repository.delete(db, vehicle)
@@ -538,6 +606,8 @@ async def update_vehicle_cameras(
             "channel_no": channel.channel_no,
             "label": channel.label,
             "rtsp_url": channel.rtsp_url,
+            "source_type": channel.source_type,
+            "source_format": channel.source_format,
         }
         for channel in channels
     ]
@@ -551,4 +621,4 @@ async def test_vehicle_camera(
 ) -> CameraTestResponse:
     _ = vehicle_id
     _ = current_user
-    return await _run_camera_test(payload.rtsp_url)
+    return await _run_camera_test(payload)

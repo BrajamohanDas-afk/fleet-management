@@ -1,5 +1,13 @@
 import { api } from './api';
-import type { Vehicle, VehicleStatus, VehicleType, LicenseStatus } from '../types';
+import type {
+  CameraConnectionType,
+  CameraSourceFormat,
+  HttpCameraFormat,
+  LicenseStatus,
+  Vehicle,
+  VehicleStatus,
+  VehicleType,
+} from '../types';
 
 export interface VehicleLatest {
   vehicle_id: number;
@@ -13,7 +21,6 @@ export interface VehicleLatest {
   received_at: string | null;
   status: VehicleStatus;
   updated_at: string;
-  // Device info is not guaranteed by the API contract but may be present.
   device_serial?: string | null;
   sim_number?: string | null;
 }
@@ -24,6 +31,16 @@ export type VehicleOut = Vehicle & {
   device_serial?: string | null;
   sim_number?: string | null;
 };
+
+export interface VehicleCameraPayload {
+  channel_no: number;
+  label: string;
+  rtsp_url: string;
+  source_url?: string;
+  source_type?: CameraConnectionType;
+  source_format?: HttpCameraFormat | 'rtsp';
+  http_format?: HttpCameraFormat | 'rtsp';
+}
 
 export interface VehicleCreate {
   registration_no: string;
@@ -36,11 +53,7 @@ export interface VehicleCreate {
     device_serial: string;
     sim_number: string;
     protocol: string;
-    cameras: Array<{
-      channel_no: number;
-      label: string;
-      rtsp_url: string;
-    }>;
+    cameras: VehicleCameraPayload[];
   } | null;
 }
 
@@ -89,12 +102,27 @@ export interface CameraChannel {
   stream_path: string | null;
   stream_url: string | null;
   rtsp_url: string | null;
+  source_url?: string | null;
+  source_type?: CameraConnectionType | null;
+  source_format?: CameraSourceFormat | null;
+  http_stream_url?: string | null;
 }
 
 export interface CameraUpdateItem {
   channel_no: number;
   label?: string;
   rtsp_url: string;
+  source_url?: string;
+  source_type?: CameraConnectionType;
+  source_format?: HttpCameraFormat | 'rtsp';
+  http_format?: HttpCameraFormat | 'rtsp';
+}
+
+export interface CameraTestResult {
+  status: string;
+  detail?: string;
+  source_type?: CameraConnectionType;
+  source_format?: CameraSourceFormat;
 }
 
 export async function getVehicleCameras(deviceId: number): Promise<CameraChannel[]> {
@@ -106,8 +134,24 @@ export async function updateVehicleCameras(vehicleId: number, cameras: CameraUpd
   await api.patch(`/vehicles/${vehicleId}/cameras`, { cameras });
 }
 
-export async function testRtspUrl(rtspUrl: string, vehicleId?: number): Promise<{ status: string; detail?: string }> {
+export async function testCameraUrl(
+  sourceUrl: string,
+  sourceType: CameraConnectionType = 'rtsp',
+  httpFormat: HttpCameraFormat = 'auto',
+  vehicleId?: number
+): Promise<CameraTestResult> {
   const path = vehicleId ? `/vehicles/${vehicleId}/cameras/test` : '/vehicles/cameras/test';
-  const response = await api.post<{ status: string; detail?: string }>(path, { rtsp_url: rtspUrl });
+  const sourceFormat = sourceType === 'rtsp' ? 'rtsp' : httpFormat;
+  const response = await api.post<CameraTestResult>(path, {
+    rtsp_url: sourceUrl,
+    source_url: sourceUrl,
+    source_type: sourceType,
+    source_format: sourceFormat,
+    http_format: sourceFormat,
+  });
   return response.data;
+}
+
+export async function testRtspUrl(rtspUrl: string, vehicleId?: number): Promise<CameraTestResult> {
+  return testCameraUrl(rtspUrl, 'rtsp', 'auto', vehicleId);
 }

@@ -7,6 +7,9 @@ export type LicenseStatus = 'valid' | 'expired' | 'pending' | 'suspended';
 export type Protocol = 'jt808' | 'sim' | 'other';
 export type DeviceSource = 'simulator' | 'browser' | 'jt808';
 export type ConnectionStatus = 'waiting' | 'connected' | 'stale' | 'authentication_error' | 'unknown_device' | 'unavailable';
+export type CameraConnectionType = 'rtsp' | 'http';
+export type HttpCameraFormat = 'auto' | 'mjpeg' | 'snapshot' | 'hls' | 'video';
+export type CameraSourceFormat = HttpCameraFormat | 'rtsp';
 
 export interface Vehicle {
   id: number;
@@ -41,6 +44,11 @@ export interface DeviceChannel {
   stream_path: string | null;
   stream_url?: string | null;
   rtsp_url?: string | null;
+  source_url?: string | null;
+  source_type?: CameraConnectionType | null;
+  source_format?: CameraSourceFormat | null;
+  http_format?: HttpCameraFormat | null;
+  http_stream_url?: string | null;
 }
 
 export interface TelemetryPoint {
@@ -108,6 +116,11 @@ export interface DeviceChannelOut {
   stream_path: string | null;
   stream_url: string | null;
   rtsp_url?: string | null;
+  source_url?: string | null;
+  source_type?: CameraConnectionType | null;
+  source_format?: CameraSourceFormat | null;
+  http_format?: HttpCameraFormat | null;
+  http_stream_url?: string | null;
 }
 
 export interface DeviceHealth {

@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 
 const devProxyTarget = process.env.VITE_DEV_PROXY_TARGET || 'http://localhost:8000';
+const httpRelayTarget = process.env.VITE_HTTP_RELAY_TARGET || 'http://localhost:9100';
 
 export default defineConfig({
   plugins: [react()],
@@ -18,6 +19,10 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: devProxyTarget,
+        changeOrigin: true,
+      },
+      '/camera-relay': {
+        target: httpRelayTarget,
         changeOrigin: true,
       },
       '/ws': {

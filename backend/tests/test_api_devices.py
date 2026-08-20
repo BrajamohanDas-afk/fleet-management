@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timezone
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.device import Device, Protocol
@@ -89,3 +90,100 @@ async def test_health_endpoint_degraded_fallback(
     assert by_channel[1]["state"] in {"degraded", "live", "idle", "offline"}
     assert by_channel[1]["label"] == "Front"
     assert by_channel[2]["label"] == "Rear"
+
+
+async def test_channels_endpoint_exposes_http_source_metadata(
+    client, auth_headers, device_with_channels, db: AsyncSession
+):
+    device = device_with_channels
+    db.add(
+        DeviceChannel(
+            device_id=device.id,
+            channel_no=3,
+            label="HTTP Yard",
+            rtsp_url="http://camera.local/mjpg/video.mjpg",
+            source_type="http",
+            source_format="mjpeg",
+            stream_path=None,
+        )
+    )
+    await db.flush()
+
+    response = await client.get(
+        f"/api/devices/{device.id}/channels", headers=auth_headers
+    )
+
+    assert response.status_code == 200
+    by_channel = {ch["channel_no"]: ch for ch in response.json()}
+    http_channel = by_channel[3]
+    assert http_channel["source_type"] == "http"
+    assert http_channel["source_format"] == "mjpeg"
+    assert http_channel["stream_url"] is None
+    assert http_channel["http_stream_url"] == f"/api/devices/{device.id}/channels/3/http-stream"
+
+
+async def test_http_stream_endpoint_redirects_to_camera_relay(
+    client, auth_headers, device_with_channels, db: AsyncSession
+):
+    device = device_with_channels
+    db.add(
+        DeviceChannel(
+            device_id=device.id,
+            channel_no=3,
+            label="HTTP Yard",
+            rtsp_url="http://camera.local/mjpg/video.mjpg",
+            source_type="http",
+            source_format="mjpeg",
+            stream_path=None,
+        )
+    )
+    await db.flush()
+
+    response = await client.get(
+        f"/api/devices/{device.id}/channels/3/http-stream",
+        headers=auth_headers,
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 307
+    assert response.headers["location"].startswith("/camera-relay/proxy?")
+    assert "format=mjpeg" in response.headers["location"]
+
+
+async def test_start_streams_skips_http_channels(
+    client, auth_headers, device_with_channels, db: AsyncSession, fake_redis
+):
+    device = device_with_channels
+    db.add(
+        DeviceChannel(
+            device_id=device.id,
+            channel_no=3,
+            label="RTSP Front",
+            rtsp_url="rtsp://127.0.0.1:554/front",
+            source_type="rtsp",
+            source_format="rtsp",
+            stream_path="rtsp-front",
+        )
+    )
+    db.add(
+        DeviceChannel(
+            device_id=device.id,
+            channel_no=4,
+            label="HTTP Yard",
+            rtsp_url="http://camera.local/mjpg/video.mjpg",
+            source_type="http",
+            source_format="mjpeg",
+            stream_path=None,
+        )
+    )
+    await db.flush()
+
+    response = await client.post(
+        f"/api/devices/{device.id}/streams/start", headers=auth_headers
+    )
+
+    assert response.status_code == 202
+    assert response.json() == {"started": 1}
+    messages = [json.loads(message) for channel, message in fake_redis.published]
+    assert [message["channel"] for message in messages] == [3]
+    assert messages[0]["rtsp_url"] == "rtsp://127.0.0.1:554/front"

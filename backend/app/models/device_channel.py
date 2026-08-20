@@ -20,6 +20,8 @@ class DeviceChannel(Base):
     # The source is kept server-side.  Browsers only receive the MediaMTX
     # WHEP URL generated from stream_path.
     rtsp_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_type: Mapped[str] = mapped_column(Text, nullable=False, default="rtsp")
+    source_format: Mapped[str] = mapped_column(Text, nullable=False, default="rtsp")
     stream_path: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     device: Mapped["Device"] = relationship("Device", back_populates="channels")

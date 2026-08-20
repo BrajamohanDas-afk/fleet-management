@@ -86,6 +86,8 @@ services:
     environment:
       VITE_API_URL: ""
       VITE_DEV_PROXY_TARGET: http://api:8000
+      VITE_CAMERA_RELAY_TARGET: http://protocol-layer:9100
+      VITE_HTTP_RELAY_TARGET: http://protocol-layer:9100
     depends_on:
       api:
         condition: service_started
@@ -104,8 +106,10 @@ services:
       REDIS_ADDR: redis:6379
       MEDIAMTX_RTSP_URL: rtsp://mediamtx:8554
       PORT: "9000"
+      HTTP_RELAY_PORT: "9100"
     ports:
       - "9000:9000"
+      - "9100:9100"
     depends_on:
       redis:
         condition: service_started
@@ -121,4 +125,3 @@ networks:
       config:
         - subnet: 10.240.20.0/24
           gateway: 10.240.20.1
-

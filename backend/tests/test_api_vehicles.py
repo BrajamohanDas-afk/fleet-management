@@ -1,9 +1,11 @@
 from datetime import datetime, timezone
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.device import Device, DeviceSource, Protocol
+from app.models.device_channel import DeviceChannel
 from app.models.share_link import ShareLink
 from app.models.vehicle import LicenseStatus, Vehicle, VehicleType
 from app.models.vehicle_latest import VehicleLatest
@@ -283,3 +285,98 @@ async def test_vehicle_response_prefers_device_with_sim_for_display(
     assert data["device_serial"] == "camera-device-with-sim"
     assert data["sim_number"] == "9000001999"
     assert data["latest"]["device_id"] == tracker_device.id
+
+
+async def test_create_vehicle_with_http_camera_stores_metadata_without_stream_command(
+    client, auth_headers, db: AsyncSession, fake_redis
+):
+    payload = {
+        "registration_no": "HTTPCAM001",
+        "vehicle_code": "VHTTP001",
+        "vehicle_type": "car",
+        "license_status": "valid",
+        "device": {
+            "device_serial": "http-camera-device-001",
+            "sim_number": "9000002001",
+            "protocol": "other",
+            "cameras": [
+                {
+                    "channel_no": 1,
+                    "label": "HTTP Yard",
+                    "rtsp_url": "http://camera.local/mjpg/video.mjpg",
+                    "source_type": "http",
+                    "source_format": "mjpeg",
+                }
+            ],
+        },
+    }
+
+    response = await client.post("/api/vehicles", json=payload, headers=auth_headers)
+
+    assert response.status_code == 201
+    device_result = await db.execute(
+        select(Device).where(Device.device_serial == "http-camera-device-001")
+    )
+    device = device_result.scalar_one()
+    channel_result = await db.execute(
+        select(DeviceChannel).where(DeviceChannel.device_id == device.id)
+    )
+    channel = channel_result.scalar_one()
+    assert channel.source_type == "http"
+    assert channel.source_format == "mjpeg"
+    assert channel.rtsp_url == "http://camera.local/mjpg/video.mjpg"
+    assert channel.stream_path is None
+    assert fake_redis.published == []
+
+
+async def test_http_camera_test_detects_format(client, auth_headers, monkeypatch):
+    async def fake_probe(url: str):
+        assert url == "http://camera.local/mjpg/video.mjpg"
+        return "mjpeg", None
+
+    monkeypatch.setattr("app.api.endpoints.vehicles.probe_http_camera_source", fake_probe)
+    payload = {
+        "rtsp_url": "http://camera.local/mjpg/video.mjpg",
+        "source_type": "http",
+        "source_format": "auto",
+    }
+
+    response = await client.post("/api/vehicles/cameras/test", json=payload, headers=auth_headers)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    assert response.json()["source_type"] == "http"
+    assert response.json()["source_format"] == "mjpeg"
+async def test_create_vehicle_with_http_camera_source(client, auth_headers):
+    payload = {
+        "registration_no": "HTTPCAM001",
+        "vehicle_code": "VHTTP001",
+        "vehicle_type": "car",
+        "license_status": "valid",
+        "device": {
+            "device_serial": "httpcam-device-001",
+            "sim_number": "9000002001",
+            "protocol": "other",
+            "cameras": [
+                {
+                    "channel_no": 1,
+                    "label": "Front",
+                    "rtsp_url": "http://example.com/mjpg/video.mjpg",
+                    "source_type": "http",
+                    "source_format": "mjpeg",
+                }
+            ],
+        },
+    }
+
+    response = await client.post("/api/vehicles", json=payload, headers=auth_headers)
+
+    assert response.status_code == 201
+    data = response.json()
+    channels = await client.get(f"/api/devices/{data['device_id']}/channels", headers=auth_headers)
+    assert channels.status_code == 200
+    channel = channels.json()[0]
+    assert channel["source_type"] == "http"
+    assert channel["source_format"] == "mjpeg"
+    assert channel["stream_url"] is None
+    assert channel["http_stream_url"].endswith("/http-stream")

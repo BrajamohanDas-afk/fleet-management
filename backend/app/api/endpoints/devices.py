@@ -1,7 +1,9 @@
 import asyncio
 from pathlib import Path
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi.responses import RedirectResponse
 from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +15,7 @@ from app.models.video_clip import VideoClip
 from app.repositories import device_repository
 from app.schemas.device import DeviceChannelHealthOut, DeviceChannelOut, DeviceOut, DeviceUpdate
 from app.schemas.recording import RecordingCreate, RecordingOut
+from app.services.camera_source_service import SOURCE_TYPE_HTTP, is_rtsp_source
 from app.services.device_service import get_channel_health, get_device_channels
 from app.services.recording_service import (
     finalize_recording,
@@ -58,6 +61,32 @@ async def list_device_channels(
     return await get_device_channels(db, device_id)
 
 
+@router.api_route("/{device_id}/channels/{channel_no}/http-stream", methods=["GET", "HEAD"])
+async def get_http_camera_stream(
+    device_id: int,
+    channel_no: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+) -> RedirectResponse:
+    _ = current_user
+    result = await db.execute(
+        select(DeviceChannel).where(
+            (DeviceChannel.device_id == device_id)
+            & (DeviceChannel.channel_no == channel_no)
+        )
+    )
+    channel = result.scalar_one_or_none()
+    if channel is None:
+        raise HTTPException(status_code=404, detail="Camera channel not found")
+    if (channel.source_type or "rtsp").lower() != SOURCE_TYPE_HTTP or not channel.rtsp_url:
+        raise HTTPException(status_code=400, detail="Camera channel is not an HTTP/HTTPS source")
+
+    source_format = (channel.source_format or "auto").lower().replace("direct_video", "video")
+    if source_format == "rtsp":
+        source_format = "auto"
+    query = urlencode({"url": channel.rtsp_url, "format": source_format})
+    return RedirectResponse(url=f"/camera-relay/proxy?{query}", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+
 @router.get("/{device_id}/health", response_model=list[DeviceChannelHealthOut])
 async def get_device_health(
     device_id: int,
@@ -94,7 +123,7 @@ async def start_device_streams(
     channels = result.scalars().all()
     started = 0
     for channel in channels:
-        if not channel.rtsp_url:
+        if not channel.rtsp_url or not is_rtsp_source(channel.source_type):
             continue
         await publish_stream_command(
             redis,
@@ -126,7 +155,7 @@ async def _record_and_finalize(
             )
         )
         channel = result.scalar_one_or_none()
-        if channel and channel.stream_path and clip.file_path:
+        if channel and channel.stream_path and is_rtsp_source(channel.source_type) and clip.file_path:
             await asyncio.to_thread(
                 run_ffmpeg_recording,
                 Path(clip.file_path),
@@ -154,6 +183,18 @@ async def start_device_recording(
     device = await device_repository.get(db, device_id)
     if device is None:
         raise HTTPException(status_code=404, detail="Device not found")
+
+    result = await db.execute(
+        select(DeviceChannel).where(
+            (DeviceChannel.device_id == device_id)
+            & (DeviceChannel.channel_no == payload.channel_no)
+        )
+    )
+    channel = result.scalar_one_or_none()
+    if channel is None:
+        raise HTTPException(status_code=404, detail="Camera channel not found")
+    if not is_rtsp_source(channel.source_type):
+        raise HTTPException(status_code=400, detail="Recording is available for RTSP cameras only")
 
     clip = await start_recording(
         db,

@@ -10,6 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models.device_channel import DeviceChannel
 from app.schemas.device import DeviceChannelHealthOut, DeviceChannelOut
+from app.services.camera_source_service import (
+    SOURCE_FORMAT_RTSP,
+    SOURCE_TYPE_HTTP,
+    SOURCE_TYPE_RTSP,
+)
 
 STALE_FRAME_SECONDS = 3
 OFFLINE_FRAME_SECONDS = 10
@@ -31,6 +36,29 @@ def build_rtsp_url(stream_path: str | None) -> str | None:
     return f"rtsp://{host}:{port}/{stream_path}"
 
 
+def build_http_stream_url(device_id: int, channel_no: int, source_type: str | None) -> str | None:
+    if (source_type or SOURCE_TYPE_RTSP).lower() != SOURCE_TYPE_HTTP:
+        return None
+    return f"/api/devices/{device_id}/channels/{channel_no}/http-stream"
+
+
+def device_channel_out(ch: DeviceChannel) -> DeviceChannelOut:
+    source_type = (ch.source_type or SOURCE_TYPE_RTSP).lower()
+    source_format = (ch.source_format or (SOURCE_FORMAT_RTSP if source_type == SOURCE_TYPE_RTSP else "auto")).lower()
+    return DeviceChannelOut(
+        id=ch.id,
+        device_id=ch.device_id,
+        channel_no=ch.channel_no,
+        label=ch.label,
+        stream_path=ch.stream_path,
+        stream_url=build_stream_url(ch.stream_path) if source_type == SOURCE_TYPE_RTSP else None,
+        rtsp_url=ch.rtsp_url,
+        source_type=source_type,
+        source_format=source_format,
+        http_stream_url=build_http_stream_url(ch.device_id, ch.channel_no, source_type),
+    )
+
+
 async def get_device_channels(
     db: AsyncSession, device_id: int
 ) -> list[DeviceChannelOut]:
@@ -40,18 +68,7 @@ async def get_device_channels(
         .order_by(DeviceChannel.channel_no)
     )
     channels = result.scalars().all()
-    return [
-        DeviceChannelOut(
-            id=ch.id,
-            device_id=ch.device_id,
-            channel_no=ch.channel_no,
-            label=ch.label,
-            stream_path=ch.stream_path,
-            stream_url=build_stream_url(ch.stream_path),
-            rtsp_url=ch.rtsp_url,
-        )
-        for ch in channels
-    ]
+    return [device_channel_out(ch) for ch in channels]
 
 
 def _parse_mediamtx_last_frame(data: dict[str, Any]) -> datetime | None:
@@ -144,7 +161,7 @@ async def get_channel_health(
         last_frame_at: datetime | None = None
         state = "idle"
 
-        if ch.stream_path:
+        if ch.stream_path and (ch.source_type or SOURCE_TYPE_RTSP).lower() == SOURCE_TYPE_RTSP:
             path_info = await _query_mediamtx_path_info(ch.stream_path)
             if path_info is not None:
                 # Response may be wrapped in "item" key.
