@@ -68,9 +68,9 @@ export default function PublicShare() {
                   No live location yet
                 </p>
                 <p className="mt-2 max-w-md text-sm text-slate-500">
-                  This vehicle has not sent a GPS update. Start tracking from
-                  the driver link or send simulator/protocol telemetry, then
-                  this page will update automatically.
+                  This vehicle has not sent a GPS update. Configure a physical
+                  GPS feed or send protocol telemetry, then this page will
+                  update automatically.
                 </p>
               </div>
             </div>

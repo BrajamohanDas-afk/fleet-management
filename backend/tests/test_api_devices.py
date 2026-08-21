@@ -150,6 +150,37 @@ async def test_http_stream_endpoint_redirects_to_camera_relay(
     assert "format=mjpeg" in response.headers["location"]
 
 
+async def test_whep_http_channel_exposes_direct_playback_url(
+    client, auth_headers, device_with_channels, db: AsyncSession
+):
+    device = device_with_channels
+    source_url = "http://camera.local:8889/cam/whep"
+    db.add(
+        DeviceChannel(
+            device_id=device.id,
+            channel_no=3,
+            label="WHEP Yard",
+            rtsp_url=source_url,
+            source_type="http",
+            source_format="whep",
+            stream_path=None,
+        )
+    )
+    await db.flush()
+
+    response = await client.get(
+        f"/api/devices/{device.id}/channels", headers=auth_headers
+    )
+
+    assert response.status_code == 200
+    by_channel = {ch["channel_no"]: ch for ch in response.json()}
+    http_channel = by_channel[3]
+    assert http_channel["source_type"] == "http"
+    assert http_channel["source_format"] == "whep"
+    assert http_channel["stream_url"] is None
+    assert http_channel["http_stream_url"] == source_url
+
+
 async def test_start_streams_skips_http_channels(
     client, auth_headers, device_with_channels, db: AsyncSession, fake_redis
 ):

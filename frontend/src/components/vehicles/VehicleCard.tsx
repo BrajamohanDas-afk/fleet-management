@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bike, Bus, Camera, Car, Edit3, Gauge, HelpCircle, Navigation, ShieldCheck, Smartphone, Trash2, Truck } from 'lucide-react';
+import { Bike, Bus, Camera, Car, Edit3, Gauge, HelpCircle, RadioTower, Share2, ShieldCheck, Trash2, Truck } from 'lucide-react';
 import type { VehicleOut } from '../../services/vehicles';
 import type { LicenseStatus, VehicleStatus, VehicleType } from '../../types';
 
@@ -44,7 +44,7 @@ interface VehicleCardProps {
   vehicle: VehicleOut;
   onEdit: (vehicle: VehicleOut) => void;
   onRequestDelete: (vehicle: VehicleOut) => void;
-  onTrack: (vehicle: VehicleOut) => void;
+  onShare: (vehicle: VehicleOut) => void;
 }
 
 function Field({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
@@ -63,15 +63,18 @@ export default function VehicleCard({
   vehicle,
   onEdit,
   onRequestDelete,
-  onTrack,
+  onShare,
 }: VehicleCardProps) {
   const navigate = useNavigate();
   const TypeIcon = VEHICLE_TYPE_ICONS[vehicle.vehicle_type];
   const status = vehicle.latest?.status ?? 'offline';
 
+  const gpsFeedUrl = vehicle.gps_feed_url?.trim() || '';
+  const gpsFeedLabel = gpsFeedUrl ? gpsFeedUrl.replace(/^https?:\/\//, '') : '--';
+  const gpsFeedEnabled = vehicle.gps_feed_enabled ?? Boolean(gpsFeedUrl);
   const deviceCode = vehicle.device_serial?.trim() || vehicle.latest?.device_serial?.trim() || '--';
-  const simNumber = vehicle.sim_number?.trim() || vehicle.latest?.sim_number?.trim() || '--';
   const hasDevice = Boolean(vehicle.device_id ?? vehicle.latest?.device_id);
+  const hasGpsFeed = Boolean(gpsFeedUrl);
 
   const handleOverview = () => {
     navigate(`/dashboard/video?vehicleId=${vehicle.id}`);
@@ -96,8 +99,8 @@ export default function VehicleCard({
       </div>
 
       <div className="mb-4 grid grid-cols-2 gap-2">
-        <Field icon={<Camera className="h-3.5 w-3.5" />} label="Device" value={deviceCode} />
-        <Field icon={<Smartphone className="h-3.5 w-3.5" />} label="SIM" value={simNumber} />
+        <Field icon={<RadioTower className="h-3.5 w-3.5" />} label="GPS feed" value={gpsFeedLabel} />
+        <Field icon={<Camera className="h-3.5 w-3.5" />} label="Camera device" value={deviceCode} />
         <Field icon={<Gauge className="h-3.5 w-3.5" />} label="Speed limit" value={vehicle.speed_limit_kmh !== null ? `${vehicle.speed_limit_kmh} km/h` : '--'} />
         <div className="app-muted-tile p-3">
           <p className="app-label mb-1 flex items-center gap-1.5">
@@ -110,9 +113,9 @@ export default function VehicleCard({
       </div>
 
       <div className="mb-4 flex items-center justify-between gap-3 app-muted-tile px-3 py-2">
-        <span className="app-label">Device status</span>
-        <span className="truncate text-sm font-medium" style={{ color: hasDevice ? 'var(--success-800)' : 'var(--text-secondary)' }}>
-          {hasDevice ? 'Registered' : 'Not connected'}
+        <span className="app-label">GPS source</span>
+        <span className="truncate text-sm font-medium" style={{ color: hasGpsFeed && gpsFeedEnabled ? 'var(--success-800)' : 'var(--text-secondary)' }}>
+          {hasGpsFeed ? (gpsFeedEnabled ? 'HTTP feed enabled' : 'HTTP feed disabled') : hasDevice ? 'Camera device only' : 'Not configured'}
         </span>
       </div>
 
@@ -125,9 +128,9 @@ export default function VehicleCard({
           <Edit3 className="h-4 w-4" />
           Edit
         </button>
-        <button type="button" onClick={() => onTrack(vehicle)} className="app-button app-button-secondary col-span-2">
-          <Navigation className="h-4 w-4" />
-          Track
+        <button type="button" onClick={() => onShare(vehicle)} className="app-button app-button-secondary col-span-2">
+          <Share2 className="h-4 w-4" />
+          Share live location
         </button>
         <button
           type="button"

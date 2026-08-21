@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.models.device_channel import DeviceChannel
 from app.schemas.device import DeviceChannelHealthOut, DeviceChannelOut
 from app.services.camera_source_service import (
+    SOURCE_FORMAT_WHEP,
     SOURCE_FORMAT_RTSP,
     SOURCE_TYPE_HTTP,
     SOURCE_TYPE_RTSP,
@@ -36,10 +37,12 @@ def build_rtsp_url(stream_path: str | None) -> str | None:
     return f"rtsp://{host}:{port}/{stream_path}"
 
 
-def build_http_stream_url(device_id: int, channel_no: int, source_type: str | None) -> str | None:
+def build_http_stream_url(channel: DeviceChannel, source_type: str | None, source_format: str | None) -> str | None:
     if (source_type or SOURCE_TYPE_RTSP).lower() != SOURCE_TYPE_HTTP:
         return None
-    return f"/api/devices/{device_id}/channels/{channel_no}/http-stream"
+    if (source_format or "").lower() == SOURCE_FORMAT_WHEP:
+        return channel.rtsp_url
+    return f"/api/devices/{channel.device_id}/channels/{channel.channel_no}/http-stream"
 
 
 def device_channel_out(ch: DeviceChannel) -> DeviceChannelOut:
@@ -55,7 +58,7 @@ def device_channel_out(ch: DeviceChannel) -> DeviceChannelOut:
         rtsp_url=ch.rtsp_url,
         source_type=source_type,
         source_format=source_format,
-        http_stream_url=build_http_stream_url(ch.device_id, ch.channel_no, source_type),
+        http_stream_url=build_http_stream_url(ch, source_type, source_format),
     )
 
 

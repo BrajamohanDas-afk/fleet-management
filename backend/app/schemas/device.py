@@ -12,6 +12,8 @@ class DeviceCreate(BaseModel):
     source: DeviceSource = DeviceSource.simulator
     external_device_id: int | None = None
     external_device_identifier: str | None = None
+    gps_feed_url: str | None = None
+    gps_feed_enabled: bool = False
 
 
 class DeviceUpdate(BaseModel):
@@ -22,6 +24,8 @@ class DeviceUpdate(BaseModel):
     source: DeviceSource | None = None
     external_device_id: int | None = None
     external_device_identifier: str | None = None
+    gps_feed_url: str | None = None
+    gps_feed_enabled: bool | None = None
 
 
 class DeviceChannelOut(BaseModel):
@@ -53,6 +57,8 @@ class DeviceOut(BaseModel):
     external_device_identifier: str | None = None
     connection_status: ConnectionStatus
     last_external_sync_at: datetime | None = None
+    gps_feed_url: str | None = None
+    gps_feed_enabled: bool = False
     channels: list[DeviceChannelOut] = []
 
 

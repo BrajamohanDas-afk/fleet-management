@@ -11,6 +11,8 @@ func TestLoadDefaults(t *testing.T) {
 	os.Unsetenv("MEDIAMTX_RTSP_URL")
 	os.Unsetenv("PORT")
 	os.Unsetenv("HTTP_RELAY_PORT")
+	os.Unsetenv("GPS_FEEDS_KEY")
+	os.Unsetenv("GPS_FEEDS_CHANNEL")
 
 	cfg := Load()
 
@@ -26,6 +28,12 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.HTTPRelayPort != "9100" {
 		t.Errorf("expected default HTTPRelayPort '9100', got '%s'", cfg.HTTPRelayPort)
 	}
+	if cfg.GPSFeedsKey != "protocol:gps_feeds" {
+		t.Errorf("expected default GPSFeedsKey 'protocol:gps_feeds', got '%s'", cfg.GPSFeedsKey)
+	}
+	if cfg.GPSFeedsChannel != "protocol.gps_feeds" {
+		t.Errorf("expected default GPSFeedsChannel 'protocol.gps_feeds', got '%s'", cfg.GPSFeedsChannel)
+	}
 }
 
 func TestLoadFromEnv(t *testing.T) {
@@ -33,11 +41,15 @@ func TestLoadFromEnv(t *testing.T) {
 	os.Setenv("MEDIAMTX_RTSP_URL", "rtsp://media:9554")
 	os.Setenv("PORT", "8080")
 	os.Setenv("HTTP_RELAY_PORT", "9191")
+	os.Setenv("GPS_FEEDS_KEY", "custom:gps")
+	os.Setenv("GPS_FEEDS_CHANNEL", "custom.gps")
 	defer func() {
 		os.Unsetenv("REDIS_ADDR")
 		os.Unsetenv("MEDIAMTX_RTSP_URL")
 		os.Unsetenv("PORT")
 		os.Unsetenv("HTTP_RELAY_PORT")
+		os.Unsetenv("GPS_FEEDS_KEY")
+		os.Unsetenv("GPS_FEEDS_CHANNEL")
 	}()
 
 	cfg := Load()
@@ -54,6 +66,12 @@ func TestLoadFromEnv(t *testing.T) {
 	if cfg.HTTPRelayPort != "9191" {
 		t.Errorf("expected HTTPRelayPort '9191', got '%s'", cfg.HTTPRelayPort)
 	}
+	if cfg.GPSFeedsKey != "custom:gps" {
+		t.Errorf("expected GPSFeedsKey 'custom:gps', got '%s'", cfg.GPSFeedsKey)
+	}
+	if cfg.GPSFeedsChannel != "custom.gps" {
+		t.Errorf("expected GPSFeedsChannel 'custom.gps', got '%s'", cfg.GPSFeedsChannel)
+	}
 }
 
 func TestLoadPartialOverride(t *testing.T) {
@@ -61,6 +79,8 @@ func TestLoadPartialOverride(t *testing.T) {
 	os.Unsetenv("MEDIAMTX_RTSP_URL")
 	os.Unsetenv("PORT")
 	os.Unsetenv("HTTP_RELAY_PORT")
+	os.Unsetenv("GPS_FEEDS_KEY")
+	os.Unsetenv("GPS_FEEDS_CHANNEL")
 	defer os.Unsetenv("REDIS_ADDR")
 
 	cfg := Load()

@@ -30,6 +30,8 @@ export type VehicleOut = Vehicle & {
   device_id?: number | null;
   device_serial?: string | null;
   sim_number?: string | null;
+  gps_feed_url?: string | null;
+  gps_feed_enabled?: boolean | null;
 };
 
 export interface VehicleCameraPayload {
@@ -49,6 +51,8 @@ export interface VehicleCreate {
   speed_limit_kmh?: number | null;
   license_status: LicenseStatus;
   license_expiry?: string | null;
+  gps_feed_url?: string | null;
+  gps_feed_enabled?: boolean;
   device?: {
     device_serial: string;
     sim_number: string;
@@ -125,6 +129,16 @@ export interface CameraTestResult {
   source_format?: CameraSourceFormat;
 }
 
+export interface GpsFeedTestResult {
+  status: string;
+  json_reachable: boolean;
+  has_fix: boolean;
+  detail?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  recorded_at?: string | null;
+}
+
 export async function getVehicleCameras(deviceId: number): Promise<CameraChannel[]> {
   const response = await api.get<CameraChannel[]>(`/devices/${deviceId}/channels`);
   return response.data;
@@ -154,4 +168,16 @@ export async function testCameraUrl(
 
 export async function testRtspUrl(rtspUrl: string, vehicleId?: number): Promise<CameraTestResult> {
   return testCameraUrl(rtspUrl, 'rtsp', 'auto', vehicleId);
+}
+
+export async function testGpsFeedUrl(
+  feedUrl: string,
+  vehicleId?: number
+): Promise<GpsFeedTestResult> {
+  const response = await api.post<GpsFeedTestResult>('/vehicles/gps-feed/test', {
+    gps_feed_url: feedUrl,
+    feed_url: feedUrl,
+    vehicle_id: vehicleId,
+  });
+  return response.data;
 }

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"protocol-layer/config"
+	"protocol-layer/gps"
 	"protocol-layer/protocol"
 	"protocol-layer/publisher"
 	redisclient "protocol-layer/redis"
@@ -43,6 +44,7 @@ func main() {
 		redis,
 	)
 	telemetryPublisher := publisher.NewTelemetryPublisher(redis.RDB)
+	gpsManager := gps.NewManager(redis.RDB, telemetryPublisher, cfg.GPSFeedsKey, cfg.GPSFeedsChannel)
 	telemetryParser := protocol.NewJSONParser()
 	tcpServer := server.NewTCPServer(":"+cfg.Port, func(_ net.Conn, data []byte) error {
 		telemetry, err := telemetryParser.Parse(data)
@@ -76,6 +78,15 @@ func main() {
 		}
 	}()
 
+	go func() {
+		log.Println("Waiting for GPS HTTP feed configs...")
+		if err := gpsManager.Run(ctx); err != nil {
+			if ctx.Err() == nil {
+				log.Printf("GPS feed manager error: %v", err)
+			}
+		}
+	}()
+
 	// Block until a shutdown signal is received
 	sig := <-sigCh
 	log.Printf("Received signal %v, shutting down...", sig)
@@ -94,6 +105,7 @@ func main() {
 
 	// Stop all active streams (cancels FFmpeg processes)
 	manager.StopAll()
+	gpsManager.StopAll()
 
 	log.Println("Shutdown complete")
 }

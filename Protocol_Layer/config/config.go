@@ -7,6 +7,8 @@ type Config struct {
 	MediaMTXRTSPURL string
 	Port            string
 	HTTPRelayPort   string
+	GPSFeedsKey     string
+	GPSFeedsChannel string
 }
 
 func Load() Config {
@@ -30,10 +32,22 @@ func Load() Config {
 		httpRelayPort = "9100"
 	}
 
+	gpsFeedsKey := os.Getenv("GPS_FEEDS_KEY")
+	if gpsFeedsKey == "" {
+		gpsFeedsKey = "protocol:gps_feeds"
+	}
+
+	gpsFeedsChannel := os.Getenv("GPS_FEEDS_CHANNEL")
+	if gpsFeedsChannel == "" {
+		gpsFeedsChannel = "protocol.gps_feeds"
+	}
+
 	return Config{
 		RedisAddr:       redisAddr,
 		MediaMTXRTSPURL: mediamtxURL,
 		Port:            port,
 		HTTPRelayPort:   httpRelayPort,
+		GPSFeedsKey:     gpsFeedsKey,
+		GPSFeedsChannel: gpsFeedsChannel,
 	}
 }

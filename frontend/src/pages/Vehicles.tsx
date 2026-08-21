@@ -5,7 +5,7 @@ import VehicleCard from '../components/vehicles/VehicleCard';
 import VehicleFilters from '../components/vehicles/VehicleFilters';
 import VehicleForm from '../components/vehicles/VehicleForm';
 import type { VehicleCreate, VehicleOut, VehicleUpdate } from '../services/vehicles';
-import TrackingLinkModal from '../components/vehicles/TrackingLinkModal';
+import ShareModal from '../components/vehicles/ShareModal';
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -137,7 +137,7 @@ export default function Vehicles() {
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [formVehicle, setFormVehicle] = useState<VehicleOut | null>(null);
-  const [trackingVehicle, setTrackingVehicle] = useState<VehicleOut | null>(null);
+  const [shareVehicle, setShareVehicle] = useState<VehicleOut | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<VehicleOut | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -247,7 +247,7 @@ export default function Vehicles() {
                 vehicle={vehicle}
                 onEdit={handleEdit}
                 onRequestDelete={handleRequestDelete}
-                onTrack={setTrackingVehicle}
+                onShare={setShareVehicle}
               />
             ))}
           </div>
@@ -262,8 +262,8 @@ export default function Vehicles() {
           isPending={createVehicle.isPending || updateVehicle.isPending}
         />
       )}
-      {trackingVehicle && (
-        <TrackingLinkModal vehicle={trackingVehicle} onClose={() => setTrackingVehicle(null)} />
+      {shareVehicle && (
+        <ShareModal vehicle={shareVehicle} onClose={() => setShareVehicle(null)} />
       )}
       {deleteTarget && (
         <DeleteVehicleModal

@@ -16,6 +16,7 @@ SOURCE_FORMAT_MJPEG = "mjpeg"
 SOURCE_FORMAT_SNAPSHOT = "snapshot"
 SOURCE_FORMAT_HLS = "hls"
 SOURCE_FORMAT_DIRECT_VIDEO = "video"
+SOURCE_FORMAT_WHEP = "whep"
 
 HTTP_SOURCE_FORMATS = {
     SOURCE_FORMAT_AUTO,
@@ -23,6 +24,7 @@ HTTP_SOURCE_FORMATS = {
     SOURCE_FORMAT_SNAPSHOT,
     SOURCE_FORMAT_HLS,
     SOURCE_FORMAT_DIRECT_VIDEO,
+    SOURCE_FORMAT_WHEP,
 }
 
 
@@ -60,7 +62,7 @@ def normalize_source_format(source_type: str, value: str | None) -> str:
         return SOURCE_FORMAT_AUTO
     if source_format not in HTTP_SOURCE_FORMATS:
         raise CameraSourceValidationError(
-            "HTTP camera source format must be auto, mjpeg, snapshot, hls, or video"
+            "HTTP camera source format must be auto, mjpeg, snapshot, hls, video, or whep"
         )
     return source_format
 
@@ -99,6 +101,8 @@ def infer_http_source_format(url: str, content_type: str | None = None) -> str:
         return SOURCE_FORMAT_SNAPSHOT
     if media_type in {"application/vnd.apple.mpegurl", "application/x-mpegurl", "audio/mpegurl"} or path.endswith(".m3u8"):
         return SOURCE_FORMAT_HLS
+    if path.endswith("/whep") or path.endswith(".whep"):
+        return SOURCE_FORMAT_WHEP
     if media_type.startswith("video/"):
         return SOURCE_FORMAT_DIRECT_VIDEO
     if path.endswith((".mjpg", ".mjpeg")):
@@ -111,6 +115,10 @@ def infer_http_source_format(url: str, content_type: str | None = None) -> str:
 
 
 async def probe_http_camera_source(url: str) -> tuple[str, str | None]:
+    detected_from_url = infer_http_source_format(url)
+    if detected_from_url == SOURCE_FORMAT_WHEP:
+        return SOURCE_FORMAT_WHEP, None
+
     timeout = httpx.Timeout(connect=5.0, read=5.0, write=5.0, pool=5.0)
     headers = {
         "Accept": "multipart/x-mixed-replace,image/*,video/*,application/vnd.apple.mpegurl,*/*;q=0.8",

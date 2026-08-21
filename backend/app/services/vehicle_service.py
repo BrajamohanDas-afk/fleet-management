@@ -31,8 +31,21 @@ def _select_vehicle_device(vehicle: Vehicle, latest: VehicleLatest | None) -> De
 
     return latest_device or devices[0]
 
+
+def _select_gps_device(vehicle: Vehicle) -> Device | None:
+    return next(
+        (
+            device
+            for device in list(vehicle.devices or [])
+            if device.gps_feed_url is not None
+        ),
+        None,
+    )
+
+
 async def _vehicle_with_latest(vehicle: Vehicle, latest: VehicleLatest | None) -> VehicleWithLatest:
     device = _select_vehicle_device(vehicle, latest)
+    gps_device = _select_gps_device(vehicle)
     return VehicleWithLatest(
         id=vehicle.id,
         registration_no=vehicle.registration_no,
@@ -46,6 +59,9 @@ async def _vehicle_with_latest(vehicle: Vehicle, latest: VehicleLatest | None) -
         device_id=device.id if device else (latest.device_id if latest else None),
         device_serial=device.device_serial if device else None,
         sim_number=device.sim_number if device else None,
+        gps_feed_url=gps_device.gps_feed_url if gps_device else None,
+        gps_feed_enabled=gps_device.gps_feed_enabled if gps_device else False,
+        gps_device_status=gps_device.connection_status.value if gps_device else None,
     )
 
 

@@ -15,17 +15,20 @@ if TYPE_CHECKING:
 class Protocol(str, enum.Enum):
     jt808 = "jt808"
     sim = "sim"
+    http_json = "http_json"
     other = "other"
 
 
 class DeviceSource(str, enum.Enum):
     simulator = "simulator"
     browser = "browser"
+    gps_http = "gps_http"
     jt808 = "jt808"
 
 
 class ConnectionStatus(str, enum.Enum):
     waiting = "waiting"
+    waiting_for_fix = "waiting_for_fix"
     connected = "connected"
     stale = "stale"
     auth_error = "authentication_error"
@@ -66,6 +69,8 @@ class Device(Base):
     last_external_sync_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    gps_feed_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    gps_feed_enabled: Mapped[bool] = mapped_column(default=False, nullable=False)
 
     vehicle: Mapped["Vehicle | None"] = relationship("Vehicle", back_populates="devices")
     channels: Mapped[list["DeviceChannel"]] = relationship(

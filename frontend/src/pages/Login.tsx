@@ -61,7 +61,7 @@ export default function Login() {
                 Control room access for live fleet movement.
               </h1>
               <p className="mx-auto mt-5 max-w-lg text-base leading-7 text-slate-300">
-                Sign in to manage vehicles, tracking links, locations, and video
+                Sign in to manage vehicles, GPS feeds, locations, and video
                 operations from one focused console.
               </p>
             </div>

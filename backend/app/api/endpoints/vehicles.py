@@ -1,4 +1,5 @@
 import asyncio
+import secrets
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -8,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_redis
 from app.core.database import get_db
-from app.models.device import Device, Protocol
+from app.models.device import ConnectionStatus, Device, DeviceSource, Protocol
 from app.models.device_channel import DeviceChannel
 from app.models.vehicle_latest import VehicleLatest
 from app.repositories import device_repository, vehicle_repository
@@ -17,6 +18,8 @@ from app.schemas.vehicle import (
     CameraTestRequest,
     CameraTestResponse,
     CameraUpdatePayload,
+    GPSFeedTestRequest,
+    GPSFeedTestResponse,
     VehicleCreate,
     VehicleDeviceUpdate,
     VehicleUpdate,
@@ -29,6 +32,12 @@ from app.services.camera_source_service import (
     probe_http_camera_source,
 )
 from app.services.device_service import device_channel_out
+from app.services.gps_feed_service import (
+    GPSFeedValidationError,
+    assert_public_http_url,
+    probe_gps_feed,
+    sync_gps_feed_config,
+)
 from app.services.rtsp_service import mask_rtsp_url
 from app.services.status_service import VehicleStatus
 from app.services.stream_command_service import publish_stream_command, publish_stop
@@ -53,9 +62,28 @@ def _protocol(value: str | None) -> Protocol:
 
 async def _get_primary_device(db: AsyncSession, vehicle_id: int) -> Device | None:
     result = await db.execute(
-        select(Device).where(Device.vehicle_id == vehicle_id).order_by(Device.id)
+        select(Device)
+        .where(Device.vehicle_id == vehicle_id)
+        .order_by(Device.source == DeviceSource.gps_http, Device.id)
     )
     return result.scalars().first()
+
+
+async def _get_gps_feed_device(db: AsyncSession, vehicle_id: int) -> Device | None:
+    result = await db.execute(
+        select(Device)
+        .where(Device.vehicle_id == vehicle_id, Device.source == DeviceSource.gps_http)
+        .order_by(Device.id)
+    )
+    return result.scalars().first()
+
+
+async def _generate_gps_serial(db: AsyncSession, vehicle_id: int) -> str:
+    for _ in range(10):
+        serial = f"gps-http-{vehicle_id}-{secrets.token_hex(6)}"
+        if await device_repository.get_by_serial(db, serial) is None:
+            return serial
+    raise HTTPException(status_code=500, detail="Could not allocate GPS device identity")
 
 
 async def _ensure_serial_available(
@@ -107,6 +135,54 @@ async def _ensure_vehicle_latest(db: AsyncSession, vehicle_id: int, device_id: i
         latest.device_id = device_id
 
 
+async def _upsert_gps_feed_device(
+    db: AsyncSession,
+    *,
+    vehicle_id: int,
+    gps_feed_url: str | None,
+    gps_feed_enabled: bool | None,
+    clear_url: bool = False,
+) -> Device | None:
+    device = await _get_gps_feed_device(db, vehicle_id)
+
+    if gps_feed_url is not None:
+        try:
+            gps_feed_url = await assert_public_http_url(gps_feed_url)
+        except GPSFeedValidationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if device is None:
+        if gps_feed_url is None:
+            return None
+        device = Device(
+            vehicle_id=vehicle_id,
+            device_serial=await _generate_gps_serial(db, vehicle_id),
+            sim_number="",
+            protocol=Protocol.http_json,
+            source=DeviceSource.gps_http,
+            connection_status=ConnectionStatus.waiting_for_fix,
+            gps_feed_url=gps_feed_url,
+            gps_feed_enabled=True if gps_feed_enabled is None else gps_feed_enabled,
+        )
+        db.add(device)
+        await db.flush()
+        await _ensure_vehicle_latest(db, vehicle_id, device.id)
+        return device
+
+    if clear_url:
+        device.gps_feed_url = None
+        device.gps_feed_enabled = False
+    elif gps_feed_url is not None:
+        device.gps_feed_url = gps_feed_url
+    if gps_feed_enabled is not None:
+        device.gps_feed_enabled = gps_feed_enabled
+    if device.gps_feed_enabled and device.connection_status == ConnectionStatus.waiting:
+        device.connection_status = ConnectionStatus.waiting_for_fix
+    await _ensure_vehicle_latest(db, vehicle_id, device.id)
+    await db.flush()
+    return device
+
+
 async def _device_out(db: AsyncSession, device: Device) -> DeviceOut:
     result = await db.execute(
         select(DeviceChannel)
@@ -126,6 +202,8 @@ async def _device_out(db: AsyncSession, device: Device) -> DeviceOut:
         external_device_identifier=device.external_device_identifier,
         connection_status=device.connection_status,
         last_external_sync_at=device.last_external_sync_at,
+        gps_feed_url=device.gps_feed_url,
+        gps_feed_enabled=device.gps_feed_enabled,
         channels=[device_channel_out(channel) for channel in channels],
     )
 
@@ -430,9 +508,10 @@ async def create_vehicle(
             detail="Vehicle with this registration number already exists",
         )
 
-    vehicle_data = payload.model_dump(exclude={"device"})
+    vehicle_data = payload.model_dump(exclude={"device", "gps_feed_url", "gps_feed_enabled"})
     vehicle = await vehicle_repository.create(db, vehicle_data)
     commands: list[tuple[str, int, str | None]] = []
+    gps_device: Device | None = None
 
     if payload.device:
         await _ensure_serial_available(db, payload.device.device_serial)
@@ -452,8 +531,18 @@ async def create_vehicle(
             cameras=payload.device.cameras,
         )
 
+    if payload.gps_feed_url:
+        gps_device = await _upsert_gps_feed_device(
+            db,
+            vehicle_id=vehicle.id,
+            gps_feed_url=payload.gps_feed_url,
+            gps_feed_enabled=payload.gps_feed_enabled,
+        )
+
     await db.commit()
     await _publish_channel_commands(redis, vehicle_id=vehicle.id, commands=commands)
+    if gps_device is not None:
+        await sync_gps_feed_config(redis, gps_device)
     enriched_vehicle = await get_vehicle_with_latest(db, vehicle.id)
     if enriched_vehicle is None:
         raise HTTPException(status_code=404, detail="Vehicle not found")
@@ -467,6 +556,23 @@ async def test_camera(
 ) -> CameraTestResponse:
     _ = current_user
     return await _run_camera_test(payload)
+
+
+@router.post("/gps-feed/test", response_model=GPSFeedTestResponse)
+async def test_gps_feed(
+    payload: GPSFeedTestRequest,
+    current_user: dict = Depends(get_current_user),
+) -> GPSFeedTestResponse:
+    _ = current_user
+    result = await probe_gps_feed(payload.gps_feed_url)
+    return GPSFeedTestResponse(
+        status=result.status,
+        json_reachable=result.json_reachable,
+        has_fix=result.has_fix,
+        detail=result.detail,
+        latitude=result.latitude,
+        longitude=result.longitude,
+    )
 
 
 @router.get("/{vehicle_id}", response_model=VehicleWithLatest)
@@ -495,7 +601,10 @@ async def update_vehicle(
     if vehicle is None:
         raise HTTPException(status_code=404, detail="Vehicle not found")
 
-    update_data = payload.model_dump(exclude_unset=True, exclude={"device"})
+    update_data = payload.model_dump(
+        exclude_unset=True,
+        exclude={"device", "gps_feed_url", "gps_feed_enabled"},
+    )
     if "registration_no" in update_data:
         existing = await vehicle_repository.get_by_registration(
             db, update_data["registration_no"]
@@ -507,6 +616,7 @@ async def update_vehicle(
             )
 
     commands: list[tuple[str, int, str | None]] = []
+    gps_device: Device | None = None
     if update_data:
         vehicle = await vehicle_repository.update(db, vehicle, update_data)
 
@@ -517,8 +627,21 @@ async def update_vehicle(
             payload=payload.device,
         )
 
+    gps_url_set = "gps_feed_url" in payload.model_fields_set
+    gps_enabled_set = "gps_feed_enabled" in payload.model_fields_set
+    if gps_url_set or gps_enabled_set:
+        gps_device = await _upsert_gps_feed_device(
+            db,
+            vehicle_id=vehicle_id,
+            gps_feed_url=payload.gps_feed_url if gps_url_set else None,
+            gps_feed_enabled=payload.gps_feed_enabled if gps_enabled_set else None,
+            clear_url=gps_url_set and payload.gps_feed_url is None,
+        )
+
     await db.commit()
     await _publish_channel_commands(redis, vehicle_id=vehicle_id, commands=commands)
+    if gps_device is not None:
+        await sync_gps_feed_config(redis, gps_device)
     enriched_vehicle = await get_vehicle_with_latest(db, vehicle_id)
     if enriched_vehicle is None:
         raise HTTPException(status_code=404, detail="Vehicle not found")
@@ -540,6 +663,7 @@ async def delete_vehicle(
     result = await db.execute(select(Device).where(Device.vehicle_id == vehicle_id))
     devices = result.scalars().all()
     stop_channels: list[int] = []
+    gps_devices = [device for device in devices if device.source == DeviceSource.gps_http]
 
     for device in devices:
         result = await db.execute(
@@ -549,6 +673,9 @@ async def delete_vehicle(
         stop_channels.extend(channel.channel_no for channel in channels if is_rtsp_source(channel.source_type))
 
     await redis.hdel("fleet:latest", str(vehicle_id))
+    for gps_device in gps_devices:
+        gps_device.gps_feed_enabled = False
+        await sync_gps_feed_config(redis, gps_device)
     await vehicle_repository.delete(db, vehicle)
     await db.commit()
 

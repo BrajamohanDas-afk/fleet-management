@@ -94,8 +94,9 @@ export default function VideoPanel({
   const isHttpSource = sourceType === 'http' || Boolean(httpStreamUrl);
   const effectiveFormat = sourceFormat === 'rtsp' ? 'auto' : sourceFormat || 'auto';
   const playbackUrl = isHttpSource ? httpStreamUrl : streamUrl;
-  const isImageHttp = isHttpSource && (effectiveFormat === 'snapshot' || effectiveFormat === 'mjpeg' || effectiveFormat === 'auto');
-  const isVideoHttp = isHttpSource && !isImageHttp;
+  const isWhepHttp = isHttpSource && effectiveFormat === 'whep';
+  const isImageHttp = isHttpSource && !isWhepHttp && (effectiveFormat === 'snapshot' || effectiveFormat === 'mjpeg' || effectiveFormat === 'auto');
+  const isVideoHttp = isHttpSource && !isImageHttp && !isWhepHttp;
 
   useEffect(() => {
     if (!isHttpSource) updateHealth(health);
@@ -137,7 +138,8 @@ export default function VideoPanel({
   }, [state, connectionKey, onStreamError]);
 
   useEffect(() => {
-    if (isHttpSource || connectionKey === 0 || !videoRef.current || !streamUrl) return;
+    const whepUrl = isWhepHttp ? httpStreamUrl : streamUrl;
+    if ((isHttpSource && !isWhepHttp) || connectionKey === 0 || !videoRef.current || !whepUrl) return;
 
     const peer = new RTCPeerConnection();
     let sessionUrl: string | null = null;
@@ -169,14 +171,14 @@ export default function VideoPanel({
         await waitForIceGatheringComplete(peer);
         const localDescription = peer.localDescription;
         if (!localDescription?.sdp) throw new Error('WebRTC offer was not created');
-        const response = await fetch(streamUrl, {
+        const response = await fetch(whepUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/sdp', Accept: 'application/sdp' },
           body: localDescription.sdp,
         });
         if (!response.ok) throw new Error(`WHEP request failed (${response.status})`);
         const location = response.headers.get('location');
-        sessionUrl = location ? new URL(location, streamUrl).href : null;
+        sessionUrl = location ? new URL(location, whepUrl).href : null;
         const answer = await response.text();
         if (!cancelled) await peer.setRemoteDescription({ type: 'answer', sdp: answer });
       } catch {
@@ -191,7 +193,7 @@ export default function VideoPanel({
       peer.close();
       if (videoRef.current) videoRef.current.srcObject = null;
     };
-  }, [connectionKey, isHttpSource, streamUrl, onStreamError, onStreamReady]);
+  }, [connectionKey, httpStreamUrl, isHttpSource, isWhepHttp, streamUrl, onStreamError, onStreamReady]);
 
   useEffect(() => {
     if (!isHttpSource || connectionKey === 0 || !httpStreamUrl) return;

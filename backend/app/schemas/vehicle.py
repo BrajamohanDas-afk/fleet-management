@@ -10,6 +10,7 @@ from app.services.camera_source_service import (
     normalize_source_type,
     validate_camera_source_url,
 )
+from app.services.gps_feed_service import validate_gps_feed_url
 from app.services.status_service import VehicleStatus
 
 
@@ -24,6 +25,15 @@ class VehicleBase(BaseModel):
 
 class VehicleCreate(VehicleBase):
     device: "VehicleDeviceCreate | None" = None
+    gps_feed_url: str | None = Field(default=None, min_length=8, max_length=2048)
+    gps_feed_enabled: bool = True
+
+    @field_validator("gps_feed_url")
+    @classmethod
+    def normalize_gps_feed_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return validate_gps_feed_url(value)
 
 
 class VehicleCameraCreate(BaseModel):
@@ -81,6 +91,15 @@ class VehicleUpdate(BaseModel):
     license_status: LicenseStatus | None = None
     license_expiry: date | None = None
     device: VehicleDeviceUpdate | None = None
+    gps_feed_url: str | None = Field(default=None, min_length=8, max_length=2048)
+    gps_feed_enabled: bool | None = None
+
+    @field_validator("gps_feed_url")
+    @classmethod
+    def normalize_gps_feed_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return validate_gps_feed_url(value)
 
 
 class VehicleOut(VehicleBase):
@@ -110,6 +129,9 @@ class VehicleWithLatest(VehicleOut):
     device_id: int | None = None
     device_serial: str | None = None
     sim_number: str | None = None
+    gps_feed_url: str | None = None
+    gps_feed_enabled: bool = False
+    gps_device_status: str | None = None
 
 
 class CameraUpdateItem(BaseModel):
@@ -156,6 +178,24 @@ class CameraTestResponse(BaseModel):
     detail: str | None = None
     source_type: str | None = None
     source_format: str | None = Field(default=None, validation_alias=AliasChoices("source_format", "http_format"))
+
+
+class GPSFeedTestRequest(BaseModel):
+    gps_feed_url: str = Field(min_length=8, max_length=2048)
+
+    @field_validator("gps_feed_url")
+    @classmethod
+    def normalize_gps_feed_url(cls, value: str) -> str:
+        return validate_gps_feed_url(value)
+
+
+class GPSFeedTestResponse(BaseModel):
+    status: str
+    json_reachable: bool
+    has_fix: bool
+    detail: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
 
 
 class VehicleSummaryOut(BaseModel):

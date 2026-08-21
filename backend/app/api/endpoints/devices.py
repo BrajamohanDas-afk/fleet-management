@@ -15,8 +15,9 @@ from app.models.video_clip import VideoClip
 from app.repositories import device_repository
 from app.schemas.device import DeviceChannelHealthOut, DeviceChannelOut, DeviceOut, DeviceUpdate
 from app.schemas.recording import RecordingCreate, RecordingOut
-from app.services.camera_source_service import SOURCE_TYPE_HTTP, is_rtsp_source
+from app.services.camera_source_service import SOURCE_FORMAT_WHEP, SOURCE_TYPE_HTTP, is_rtsp_source
 from app.services.device_service import get_channel_health, get_device_channels
+from app.services.gps_feed_service import sync_gps_feed_config
 from app.services.recording_service import (
     finalize_recording,
     run_ffmpeg_recording,
@@ -28,22 +29,36 @@ router = APIRouter(prefix="/devices", tags=["devices"])
 
 
 @router.patch("/{device_id}", response_model=DeviceOut)
-async def update_device(device_id: int, payload: DeviceUpdate, db: AsyncSession = Depends(get_db), current_user: dict = Depends(get_current_user)) -> DeviceOut:
+async def update_device(
+    device_id: int,
+    payload: DeviceUpdate,
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+    current_user: dict = Depends(get_current_user),
+) -> DeviceOut:
     _ = current_user
     device = await device_repository.get(db, device_id)
     if device is None:
         raise HTTPException(status_code=404, detail="Device not found")
     updated = await device_repository.update(db, device, payload.model_dump(exclude_unset=True))
     await db.commit()
+    await sync_gps_feed_config(redis, updated)
     return DeviceOut.model_validate(updated)
 
 
 @router.delete("/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_device(device_id: int, db: AsyncSession = Depends(get_db), current_user: dict = Depends(get_current_user)) -> None:
+async def delete_device(
+    device_id: int,
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+    current_user: dict = Depends(get_current_user),
+) -> None:
     _ = current_user
     device = await device_repository.get(db, device_id)
     if device is None:
         raise HTTPException(status_code=404, detail="Device not found")
+    device.gps_feed_enabled = False
+    await sync_gps_feed_config(redis, device)
     await device_repository.delete(db, device)
     await db.commit()
 
@@ -84,6 +99,8 @@ async def get_http_camera_stream(
     source_format = (channel.source_format or "auto").lower().replace("direct_video", "video")
     if source_format == "rtsp":
         source_format = "auto"
+    if source_format == SOURCE_FORMAT_WHEP:
+        return RedirectResponse(url=channel.rtsp_url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
     query = urlencode({"url": channel.rtsp_url, "format": source_format})
     return RedirectResponse(url=f"/camera-relay/proxy?{query}", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
 

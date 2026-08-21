@@ -6,6 +6,7 @@ from app.services.camera_source_service import (
     SOURCE_FORMAT_MJPEG,
     SOURCE_FORMAT_SNAPSHOT,
     SOURCE_FORMAT_DIRECT_VIDEO,
+    SOURCE_FORMAT_WHEP,
     infer_http_source_format,
     normalize_source_format,
     normalize_source_type,
@@ -42,6 +43,7 @@ def test_normalize_source_format():
     assert normalize_source_format("rtsp", None) == "rtsp"
     assert normalize_source_format("http", None) == "auto"
     assert normalize_source_format("http", "direct-video") == "video"
+    assert normalize_source_format("http", "whep") == "whep"
 
 
 def test_infer_http_source_format():
@@ -49,3 +51,4 @@ def test_infer_http_source_format():
     assert infer_http_source_format("http://camera.local/frame", "image/jpeg") == SOURCE_FORMAT_SNAPSHOT
     assert infer_http_source_format("http://camera.local/live.m3u8", "text/plain") == SOURCE_FORMAT_HLS
     assert infer_http_source_format("http://camera.local/live", "video/mp4") == SOURCE_FORMAT_DIRECT_VIDEO
+    assert infer_http_source_format("http://camera.local:8889/cam/whep") == SOURCE_FORMAT_WHEP

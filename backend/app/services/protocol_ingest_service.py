@@ -7,7 +7,9 @@ from datetime import datetime, timezone
 
 from app.core.database import AsyncSessionLocal
 from app.core.redis import get_redis_client
+from app.models.device import ConnectionStatus
 from app.repositories import device_repository
+from app.services.gps_feed_service import GPS_STATUS_REDIS_CHANNEL
 from app.services.telemetry_service import ingest_telemetry
 
 _task: asyncio.Task[None] | None = None
@@ -24,11 +26,28 @@ def _recorded_at(value: object) -> datetime:
 async def _consume() -> None:
     redis = get_redis_client()
     pubsub = redis.pubsub()
-    await pubsub.subscribe("protocol.telemetry")
+    await pubsub.subscribe("protocol.telemetry", GPS_STATUS_REDIS_CHANNEL)
     try:
         async for message in pubsub.listen():
             if message.get("type") != "message":
                 continue
+            if message.get("channel") == GPS_STATUS_REDIS_CHANNEL:
+                try:
+                    payload = json.loads(message["data"])
+                    device_serial = str(payload["device_id"])
+                    status_value = str(payload["status"])
+                    connection_status = ConnectionStatus(status_value)
+                except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+                    continue
+
+                async with AsyncSessionLocal() as db:
+                    device = await device_repository.get_by_serial(db, device_serial)
+                    if device is None:
+                        continue
+                    device.connection_status = connection_status
+                    await db.commit()
+                continue
+
             try:
                 payload = json.loads(message["data"])
                 device_serial = str(payload["device_id"])
@@ -49,7 +68,7 @@ async def _consume() -> None:
                 )
                 await db.commit()
     finally:
-        await pubsub.unsubscribe("protocol.telemetry")
+        await pubsub.unsubscribe("protocol.telemetry", GPS_STATUS_REDIS_CHANNEL)
         await pubsub.close()
 
 

@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import json
 
 import pytest
 from sqlalchemy import select
@@ -380,3 +381,107 @@ async def test_create_vehicle_with_http_camera_source(client, auth_headers):
     assert channel["source_format"] == "mjpeg"
     assert channel["stream_url"] is None
     assert channel["http_stream_url"].endswith("/http-stream")
+
+
+async def test_create_vehicle_with_gps_feed_generates_device_and_syncs_redis(
+    client, auth_headers, db: AsyncSession, fake_redis, monkeypatch
+):
+    async def allow_url(url: str) -> str:
+        return url
+
+    monkeypatch.setattr("app.api.endpoints.vehicles.assert_public_http_url", allow_url)
+    payload = {
+        "registration_no": "GPSHTTP001",
+        "vehicle_code": "VGPS001",
+        "vehicle_type": "car",
+        "license_status": "valid",
+        "gps_feed_url": "https://feeds.example.com/vehicle-1.json",
+        "gps_feed_enabled": True,
+    }
+
+    response = await client.post("/api/vehicles", json=payload, headers=auth_headers)
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["gps_feed_url"] == "https://feeds.example.com/vehicle-1.json"
+    assert data["gps_feed_enabled"] is True
+    assert data["gps_device_status"] == "waiting_for_fix"
+
+    result = await db.execute(
+        select(Device).where(Device.vehicle_id == data["id"], Device.source == DeviceSource.gps_http)
+    )
+    device = result.scalar_one()
+    assert device.device_serial.startswith("gps-http-")
+    assert device.sim_number == ""
+    assert device.protocol == Protocol.http_json
+    assert device.gps_feed_enabled is True
+
+    raw = await fake_redis.hget("protocol:gps_feeds", device.device_serial)
+    synced = json.loads(raw)
+    assert synced["device_serial"] == device.device_serial
+    assert synced["vehicle_id"] == data["id"]
+    assert synced["url"] == "https://feeds.example.com/vehicle-1.json"
+
+
+async def test_update_vehicle_disables_gps_feed_removes_redis_config(
+    client, auth_headers, sample_vehicles, db: AsyncSession, fake_redis, monkeypatch
+):
+    async def allow_url(url: str) -> str:
+        return url
+
+    monkeypatch.setattr("app.api.endpoints.vehicles.assert_public_http_url", allow_url)
+    vehicle = sample_vehicles[0]
+    create_response = await client.patch(
+        f"/api/vehicles/{vehicle.id}",
+        json={"gps_feed_url": "https://feeds.example.com/vehicle-2.json", "gps_feed_enabled": True},
+        headers=auth_headers,
+    )
+    assert create_response.status_code == 200
+
+    result = await db.execute(
+        select(Device).where(Device.vehicle_id == vehicle.id, Device.source == DeviceSource.gps_http)
+    )
+    device = result.scalar_one()
+    assert await fake_redis.hget("protocol:gps_feeds", device.device_serial) is not None
+
+    disable_response = await client.patch(
+        f"/api/vehicles/{vehicle.id}",
+        json={"gps_feed_enabled": False},
+        headers=auth_headers,
+    )
+
+    assert disable_response.status_code == 200
+    assert disable_response.json()["gps_feed_enabled"] is False
+    assert await fake_redis.hget("protocol:gps_feeds", device.device_serial) is None
+
+
+async def test_gps_feed_test_endpoint_returns_probe_result(client, auth_headers, monkeypatch):
+    async def fake_probe(url: str):
+        from app.services.gps_feed_service import GPSFeedProbeResult
+
+        assert url == "https://feeds.example.com/vehicle-3.json"
+        return GPSFeedProbeResult(
+            json_reachable=True,
+            has_fix=True,
+            status="fix",
+            latitude=17.4,
+            longitude=78.5,
+        )
+
+    monkeypatch.setattr("app.api.endpoints.vehicles.probe_gps_feed", fake_probe)
+
+    response = await client.post(
+        "/api/vehicles/gps-feed/test",
+        json={"gps_feed_url": "https://feeds.example.com/vehicle-3.json"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "fix",
+        "json_reachable": True,
+        "has_fix": True,
+        "detail": None,
+        "latitude": 17.4,
+        "longitude": 78.5,
+    }

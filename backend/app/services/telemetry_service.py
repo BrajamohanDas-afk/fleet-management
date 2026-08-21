@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.device import ConnectionStatus
 from app.models.telemetry_point import TelemetryPoint
 from app.models.vehicle import Vehicle
 from app.models.vehicle_latest import VehicleLatest
@@ -57,6 +58,7 @@ async def ingest_telemetry(
     status = derive_status(fix_age_seconds, speed_kmh)
 
     device.last_seen_at = received_at
+    device.connection_status = ConnectionStatus.connected
 
     vehicle_latest = await db.get(VehicleLatest, device.vehicle_id)
     if vehicle_latest is None:
